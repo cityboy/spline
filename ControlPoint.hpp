@@ -16,13 +16,10 @@ public:
 	bool Ended () const;
 	glm::vec2 Begin () const;
 	glm::vec2 End () const;
-	void Display ();
 	
 private:
 	glm::vec2 mBeginPos, mEndPos;
 	bool mEnded;
-//	glm::vec2 mVertices[8];
-//	GLuint mVbo;	
 };
 
 #endif

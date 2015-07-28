@@ -122,28 +122,16 @@ int main( void )
 
 	} 
 
-	for (std::vector<ControlPoint>::iterator it=controlPoints.begin(); it!=controlPoints.c            (); ++it) {
+	for (std::vector<ControlPoint>::iterator it=controlPoints.begin(); it!=controlPoints.end(); ++it) {
 		vec2 begin = it->Begin();
-		vec2 end = it->End();
-		printf("%6.3f,%6.3f - %6.3f,%6.3f\n",begin.x,begin.y,end.x,end.y);
+		vec2 e = it->End();
+		printf("%6.3f,%6.3f - %6.3f,%6.3f\n",begin.x,begin.y,e.x,e.y);
 	}
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
 
 	return 0;
-}
-
-void InitBasis (int n, int k, float* N, int sz) {
-	int nk1 = n+k+1;
-	float ti[nk1+1];
-	for (int i=0; i<=nk1; i++)
-		ti[i] = (float)i/(float)nk1;
-	for (int i=0; i<nk1*sz; i++)
-		N[i] = 0.0f;
-	for (int i=0; i<sz; i++) {
-		
-	}
 }
 
 //---------------------------------
@@ -187,8 +175,10 @@ void button_callback (GLFWwindow* window, int button, int action, int mods) {
 	if (button==GLFW_MOUSE_BUTTON_1 && action==GLFW_RELEASE) {
 		float sx,sy;
 		ScalePosition(x,y,sx,sy);
-		ControlPoint ctrlPt = controlPoints.back();
-		ctrlPt.SetEnd(sx,sy);
+		if ((sx<GRID_MIN) || (sx>GRID_MAX) || (sy<GRID_MIN) || (sy>GRID_MAX))
+			controlPoints.pop_back();	// control point is invalid - DISCARD
+		else
+			controlPoints.back().SetEnd(sx,sy);
 		std::cout << "R:" << x << "," << y << " -- " << sx << "," << sy << std::endl;
 	} 
 }
@@ -258,25 +248,6 @@ GLuint CreateGrid() {
 }
 
 GLuint CreateRect() {
-/*	
-	static float vertices[] = {
-		0.34f, 0.12f, 0.0f,
-		0.55f, 0.12f, 0.0f,
-		0.55f, 0.62f, 0.0f,
-		0.34f, 0.62f, 0.0f
-	 };
-	GLuint Vbo;
-	glGenBuffers(1, &Vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, Vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,0,(void*)0);
-	glEnableVertexAttribArray(0);
-	glBindVertexArray(0);
-	glDisableVertexAttribArray(0);
-
-	return Vbo;
-*/
-	
 	GLuint VertexArrayID;
 	glGenVertexArrays(1, &VertexArrayID);
 	glBindVertexArray(VertexArrayID);

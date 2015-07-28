@@ -10,6 +10,8 @@
 ControlPoint::ControlPoint (float x, float y) {
 	mBeginPos.x = x;
 	mBeginPos.y = y;
+	mEndPos.x = -1.0f;
+	mEndPos.y = -1.0f;
 	mEnded = false;
 }
 
@@ -21,7 +23,6 @@ void ControlPoint::SetEnd (float x, float y) {
 	mEndPos.x = x;
 	mEndPos.y = y;
 	mEnded = true;
-	printf("[%6.3f,%6.3f] [%6.3f,%6.3f]\n",mBeginPos.x,mBeginPos.y,mEndPos.x,mEndPos.y);
 }
 
 bool ControlPoint::Ended () const {
@@ -33,11 +34,6 @@ glm::vec2 ControlPoint::Begin () const {
 }
 
 glm::vec2 ControlPoint::End () const {
-	printf("[%6.3f,%6.3f] [%6.3f,%6.3f]\n",mBeginPos.x,mBeginPos.y,mEndPos.x,mEndPos.y);
 	return mEndPos;
-}
-
-void ControlPoint::Display () {
-
 }
 
