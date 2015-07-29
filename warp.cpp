@@ -49,7 +49,7 @@ void key_callback (GLFWwindow*, int, int, int, int);
 void cursor_pos_callback (GLFWwindow*, double, double);
 void button_callback (GLFWwindow*, int, int, int);
 GLuint LoadSimpleShader (const char* vert, const char* frag);
-GLuint CreateRect ();
+GLuint CreateShape ();
 
 int main( void )
 {
@@ -95,7 +95,6 @@ int main( void )
 	GLuint ColorID = glGetUniformLocation(programme, "color");
 
 	grid = new Grid(GRID_SZ, GRID_MIN, GRID_MAX);
-	GLuint VAOrect = CreateRect();
 
 	// Enable depth test
 	glEnable(GL_DEPTH_TEST);
@@ -108,13 +107,11 @@ int main( void )
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glUniform3f(ColorID, 1.0f, 0.0f, 1.0f);
+		for (std::vector<ControlPoint>::iterator it=controlPoints.begin(); it!=controlPoints.end(); ++it) {
+			it->Display(ColorID);
+		}
 
-		glBindVertexArray(VAOrect);
-		glDrawArrays(GL_TRIANGLES,0,3);
-
-		glUniform3f(ColorID, 0.8f, 0.8f, 0.8f);
-		grid->Display();
+		grid->Display(ColorID);
 		
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -140,11 +137,9 @@ int main( void )
 void framebuffer_size_callback (GLFWwindow* window, int width, int height) {
 	win_width = (double)width;
 	win_height = (double)height;
-//	glViewport(0,0,width,height);
 }
 
 void key_callback (GLFWwindow* window, int key, int scancode, int action, int mods) {
-	//printf("KEY - %d %d %d %d\n",key,scancode,action,mods);
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
 }
@@ -177,8 +172,13 @@ void button_callback (GLFWwindow* window, int button, int action, int mods) {
 		ScalePosition(x,y,sx,sy);
 		if ((sx<GRID_MIN) || (sx>GRID_MAX) || (sy<GRID_MIN) || (sy>GRID_MAX))
 			controlPoints.pop_back();	// control point is invalid - DISCARD
-		else
-			controlPoints.back().SetEnd(sx,sy);
+		else {
+			ControlPoint ctrlPt = controlPoints.back();
+			if ((ctrlPt.Begin().x==sx) && (ctrlPt.Begin().y==sy))
+				controlPoints.pop_back();	// control point is invalid - DISCARD
+			else 
+				controlPoints.back().SetEnd(sx,sy);
+		}
 		std::cout << "R:" << x << "," << y << " -- " << sx << "," << sy << std::endl;
 	} 
 }
@@ -195,76 +195,6 @@ GLuint LoadSimpleShader (const char* vert, const char* frag) {
     glAttachShader (shader_programme, vs);
     glLinkProgram (shader_programme);
 	return shader_programme;
-}
-
-
-GLuint CreateGrid() {
-	
-	unsigned int indices[GRID_SZ*(GRID_SZ+1)*4];
-	GLfloat vertices[(GRID_SZ+1)*(GRID_SZ+1)*3];
-	GLfloat step = (GRID_MAX - GRID_MIN) / (GLfloat)GRID_SZ;
-	
-	// Define vertex positions on the sides of the frame
-	int idx = 0;
-	for (int i=0; i<=GRID_SZ; i++) {
-		for (int j=0; j<=GRID_SZ; j++) {
-			vertices[idx++] = GRID_MIN + step * (float)j;
-			vertices[idx++] = GRID_MIN + step * (float)i;
-			vertices[idx++] = 0.0f;
-		}
-	}
-	// Define the connection sequence
-	idx = 0;
-	for (int i=0; i<=GRID_SZ; i++) {
-		for (int j=0; j<=GRID_SZ; j++) {
-			if (j!=GRID_SZ) {
-				indices[idx++] = i * (GRID_SZ+1) + j;
-				indices[idx++] = i * (GRID_SZ+1) + (j+1);
-			}
-			if (i!=GRID_SZ) {
-				indices[idx++] = i * (GRID_SZ+1) + j;
-				indices[idx++] = (i+1) * (GRID_SZ+1) + j;
-			}
-		}
-	}
-
-	GLuint Vao;
-	glGenVertexArrays(1, &Vao);
-	glBindVertexArray(Vao);
-
-	GLuint Vbo[2];
-	glGenBuffers(2, Vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, Vbo[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,0,(void*)0);
-	glEnableVertexAttribArray(0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Vbo[1]);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	glBindVertexArray(0);
-	glDisableVertexAttribArray(0);
-
-	return Vao;
-}
-
-GLuint CreateRect() {
-	GLuint VertexArrayID;
-	glGenVertexArrays(1, &VertexArrayID);
-	glBindVertexArray(VertexArrayID);
-	static const GLfloat g_vertex_buffer_data[] = { 
-		0.433f, 0.152f, 0.0f,
-		0.624f, 0.129f, 0.0f,
-		0.491f, 0.321f, 0.0f,
-	};
-	GLuint vertexbuffer;
-	glGenBuffers(1, &vertexbuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(g_vertex_buffer_data), g_vertex_buffer_data, GL_STATIC_DRAW);
-	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,0,(void*)0);
-	glEnableVertexAttribArray(0);
-	glBindVertexArray(0);
-	glDisableVertexAttribArray(0);
-	return VertexArrayID;
 }
 
 

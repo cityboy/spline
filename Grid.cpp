@@ -76,7 +76,10 @@ void Grid::Initialise () {
 	glDisableVertexAttribArray(0);
 }
 
-void Grid::Display () {
+// color has default value of -1, which means DOES NOT change color
+void Grid::Display (int color) {
+	if (color>=0)
+		glUniform3f(color, 0.8f, 0.8f, 0.8f);
 	glBindVertexArray(mVao);
 	glDrawElements(GL_LINES, mIndicesSize, GL_UNSIGNED_INT, (void*)0);
 }

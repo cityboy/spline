@@ -13,7 +13,7 @@ public:
 	Grid (unsigned int sz, float min=-1.0f, float max=1.0f);
 	~Grid ();
 	void Initialise ();
-	void Display ();
+	void Display (int color=-1);
 	void Warp ();
 	
 private:
