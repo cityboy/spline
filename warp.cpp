@@ -9,6 +9,7 @@
 #include <time.h>
 #include <iostream>
 #include <vector>
+#include <utility>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -38,7 +39,7 @@ const char* fragment_shader =
 "}";
 
 Grid* grid;
-#define GRID_SZ 50
+#define GRID_SZ 20
 #define GRID_MIN -0.95f
 #define GRID_MAX 0.95f
 
@@ -120,9 +121,9 @@ int main( void )
 	} 
 
 	for (std::vector<ControlPoint>::iterator it=controlPoints.begin(); it!=controlPoints.end(); ++it) {
-		vec2 begin = it->Begin();
+		vec2 b = it->Begin();
 		vec2 e = it->End();
-		printf("%6.3f,%6.3f - %6.3f,%6.3f\n",begin.x,begin.y,e.x,e.y);
+		printf("%6.3f,%6.3f - %6.3f,%6.3f\n",b.x,b.y,e.x,e.y);
 	}
 
 	// Close OpenGL window and terminate GLFW
@@ -176,10 +177,14 @@ void button_callback (GLFWwindow* window, int button, int action, int mods) {
 			ControlPoint ctrlPt = controlPoints.back();
 			if ((ctrlPt.Begin().x==sx) && (ctrlPt.Begin().y==sy))
 				controlPoints.pop_back();	// control point is invalid - DISCARD
-			else 
+			else {
 				controlPoints.back().SetEnd(sx,sy);
+				printf("(%6.4f,%6.4f)->(%6.4f,%6.4f)\n",ctrlPt.Begin().x,ctrlPt.Begin().y,sx,sy);
+				grid->Warp(std::make_pair(ctrlPt.Begin(),glm::vec2(sx,sy)));
+			}
 		}
 		std::cout << "R:" << x << "," << y << " -- " << sx << "," << sy << std::endl;
+		
 	} 
 }
 

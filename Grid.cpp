@@ -4,6 +4,7 @@
 
 #include "Grid.hpp"
 #include <stdio.h>
+#include <math.h>
 
 Grid::Grid (unsigned int sz, float min, float max) {
 	mSize = sz;
@@ -84,7 +85,41 @@ void Grid::Display (int color) {
 	glDrawElements(GL_LINES, mIndicesSize, GL_UNSIGNED_INT, (void*)0);
 }
 
-void Grid::Warp () {
+float RBF (float const rsq) {
+	return 1.0f / sqrt(1.0f + rsq*10.0f);
+}
+
+float Dsq (glm::vec2 const p1, glm::vec2 const p2) {
+	glm::vec2 d = p1 - p2;
+	return d.x*d.x + d.y*d.y;
+}
+
+void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
+	glm::vec2 ctrlPt = shift.first;
+	glm::vec2 delta = shift.second - shift.first;
+
+	float step = (mMax - mMin) / float(mSize);
 	
+	// Define vertex positions on the sides of the frame
+	glm::vec2 *ptr = mVertices;
+	glm::vec2 point;
+	float rbf;
+	for (int i=0; i<=mSize; i++) {
+		for (int j=0; j<=mSize; j++) {
+			point.x = mMin + step * float(j);
+			point.y = mMin + step * float(i);
+			rbf = RBF(Dsq(point,ctrlPt));
+			//*ptr = point + delta * rbf;
+			ptr->x = point.x + delta.x * rbf;
+			ptr->y = point.y + delta.y * rbf;
+			
+			if (rbf>0.9)
+				printf("[%2d,%2d]%6.4f (%6.4f,%6.4f)->(%6.4f,%6.4f)\n",j,i,rbf,point.x,point.y,ptr->x,ptr->y);
+			
+			ptr++;
+		}
+	}
+	glBindBuffer(GL_ARRAY_BUFFER, mVbo[0]);
+	glBufferData(GL_ARRAY_BUFFER, mVerticesSize * sizeof(glm::vec2), mVertices, GL_STATIC_DRAW);
 }
 

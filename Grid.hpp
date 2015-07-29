@@ -7,6 +7,7 @@
 
 #include <GL/glew.h>
 #include <glm/glm.hpp>
+#include <utility>
 
 class Grid {
 public:
@@ -14,7 +15,7 @@ public:
 	~Grid ();
 	void Initialise ();
 	void Display (int color=-1);
-	void Warp ();
+	void Warp (std::pair<glm::vec2,glm::vec2> cp);
 	
 private:
 	int mSize;
