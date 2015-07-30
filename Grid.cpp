@@ -85,13 +85,18 @@ void Grid::Display (int color) {
 	glDrawElements(GL_LINES, mIndicesSize, GL_UNSIGNED_INT, (void*)0);
 }
 
-float RBF (float const rsq) {
-	return 1.0f / sqrt(1.0f + rsq*10.0f);
+// Basis functions
+float B0 (float s) {
+	return ((1.0f-s)*(1.0f-s)*(1.0f-s)/6.0f);
 }
-
-float Dsq (glm::vec2 const p1, glm::vec2 const p2) {
-	glm::vec2 d = p1 - p2;
-	return d.x*d.x + d.y*d.y;
+float B1 (float s) {
+	return ((3.0f*s*s*s - 6.0f*s*s + 4.0f)/6.0f);
+}
+float B2 (float s) {
+	return ((-3.0f*s*s*s + 3.0f*s*s + 3.0f*s + 1)/6.0f);
+}
+float B3 (float s) {
+	return (s*s*s/6.0f);
 }
 
 void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
@@ -99,26 +104,40 @@ void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
 	glm::vec2 delta = shift.second - shift.first;
 
 	float step = (mMax - mMin) / float(mSize);
+	printf("(%6.3f,%6.3f) (%6.3f,%6.3f) %6.3f\n",shift.first.x,shift.first.y,shift.second.x,shift.second.y,step);
 	
 	// Define vertex positions on the sides of the frame
 	glm::vec2 *ptr = mVertices;
-	glm::vec2 point;
-	float rbf;
 	for (int i=0; i<=mSize; i++) {
 		for (int j=0; j<=mSize; j++) {
-			point.x = mMin + step * float(j);
-			point.y = mMin + step * float(i);
-			rbf = RBF(Dsq(point,ctrlPt));
-			//*ptr = point + delta * rbf;
-			ptr->x = point.x + delta.x * rbf;
-			ptr->y = point.y + delta.y * rbf;
-			
-			if (rbf>0.9)
-				printf("[%2d,%2d]%6.4f (%6.4f,%6.4f)->(%6.4f,%6.4f)\n",j,i,rbf,point.x,point.y,ptr->x,ptr->y);
-			
+			ptr->x = mMin + step * float(j);	//-- x
+			ptr->y = mMin + step * float(i);	//-- y
 			ptr++;
 		}
 	}
+	// Calculate the embeddings
+	int i = int(ctrlPt.x/step) - 1;
+	int j = int(ctrlPt.y/step) - 1;
+	float s = ctrlPt.x/step - float(i);
+	float t = ctrlPt.y/step - float(j);
+	printf("[%2d,%2d] (%6.3f,%6.3f)\n",i,j,s,t);
+	// Calculate basis values
+	float bs[] = { B0(s), B1(s), B2(s), B3(s) };
+	float bt[] = { B0(t), B1(t), B2(t), B3(t) };
+	float sum_w_sq = 0.0f;
+	for (int a=0; a<=3; a++)
+		for (int b=0; b<=3; b++)
+			sum_w_sq += bs[a]*bs[a]*bt[b]*bt[b];
+	// Calculate the shift of 16 neighborhood
+	glm::vec2 move;
+	for (int k=0; k<=3; k++) {
+		for (int l=0; l<=3; l++) {
+			ptr = mVertices + (i+l) + (j+k)*(mSize+1);
+			move = delta * bs[k]*bt[l]/sum_w_sq;
+			*ptr = *ptr + move;
+		}
+	}
+
 	glBindBuffer(GL_ARRAY_BUFFER, mVbo[0]);
 	glBufferData(GL_ARRAY_BUFFER, mVerticesSize * sizeof(glm::vec2), mVertices, GL_STATIC_DRAW);
 }

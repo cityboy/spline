@@ -179,7 +179,6 @@ void button_callback (GLFWwindow* window, int button, int action, int mods) {
 				controlPoints.pop_back();	// control point is invalid - DISCARD
 			else {
 				controlPoints.back().SetEnd(sx,sy);
-				printf("(%6.4f,%6.4f)->(%6.4f,%6.4f)\n",ctrlPt.Begin().x,ctrlPt.Begin().y,sx,sy);
 				grid->Warp(std::make_pair(ctrlPt.Begin(),glm::vec2(sx,sy)));
 			}
 		}
