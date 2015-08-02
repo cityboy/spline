@@ -117,29 +117,62 @@ void Grid::Embedding (glm::vec2 pt, int& i, int& j, float& s, float& t) {
 	t = tt - float(j-1);
 }
 
-void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
-	glm::vec2 ctrlPt = shift.first;
-	glm::vec2 delta = shift.second - shift.first;
-
-	float step = (mMax - mMin) / float(mSize);
-	printf("(%6.3f,%6.3f) (%6.3f,%6.3f) %6.3f\n",shift.first.x,shift.first.y,shift.second.x,shift.second.y,step);
-	
-	// Calculate the embeddings
+void Grid::Warp (std::vector<ControlPoint> cps) {
 	int i, j;
 	float s, t;
-	Embedding(ctrlPt, i, j, s, t);
-	printf("[%2d,%2d] (%6.3f,%6.3f)\n",i,j,s,t);
-	// Calculate basis values
-	float bs[] = { B0(s), B1(s), B2(s), B3(s) };
-	float bt[] = { B0(t), B1(t), B2(t), B3(t) };
-	float sum_w_sq = 0.0f;
-	for (int b=0; b<=3; b++)
-		for (int a=0; a<=3; a++)
-			sum_w_sq += bs[a]*bs[a]*bt[b]*bt[b];
-	// Calculate the shift of 16 neighborhood
-	for (int l=0; l<=3; l++) {
-		for (int k=0; k<=3; k++) {
-			mKnots[i+k-1][j+l-1] = mKnots[i+k-1][j+l-1] + delta * bs[k]*bt[l]/sum_w_sq;
+	float bs[4], bt[4];
+
+	//-- Intermediate arrays
+	glm::vec2 d[NUM_KNOTS+3][NUM_KNOTS+3];
+	float w[NUM_KNOTS+3][NUM_KNOTS+3];
+	for (int b=0; b<NUM_KNOTS+3; b++) {
+		for (int a=0; a<NUM_KNOTS+3; a++) {
+			d[a][b] = glm::vec2(0.0f,0.0f);
+			w[a][b] = 0.0f;
+		}
+	}
+
+	//-- Calculate knots for each control point and update intermediate arrays
+	for (std::vector<ControlPoint>::iterator it=cps.begin(); it!=cps.end(); ++it) {
+		printf("(%6.3f,%6.3f) (%6.3f,%6.3f)\n",it->Begin().x,it->Begin().y,it->End().x,it->End().y);
+		glm::vec2 ctrlPt = it->Begin();
+		glm::vec2 delta = it->End() - it->Begin();
+	
+		// Calculate the embeddings
+		Embedding(ctrlPt, i, j, s, t);
+		printf("[%2d,%2d] (%6.3f,%6.3f)\n",i,j,s,t);
+		// Calculate basis values
+		bs[0] = B0(s); bs[1] = B1(s); bs[2] = B2(s); bs[3] = B3(s);
+		bt[0] = B0(t); bt[1] = B1(t); bt[2] = B2(t); bt[3] = B3(t);
+		float sum_w_sq = 0.0f;
+		for (int b=0; b<=3; b++)
+			for (int a=0; a<=3; a++)
+				sum_w_sq += bs[a]*bs[a]*bt[b]*bt[b];
+		// Calculate the shift of 16 neighborhood
+		for (int l=0; l<=3; l++) {
+			for (int k=0; k<=3; k++) {
+				mKnots[i+k-1][j+l-1] = delta * bs[k]*bt[l]/sum_w_sq;
+				float w_kl = bs[k]*bs[k]*bt[l]*bt[l];
+				d[i+k-1][j+l-1] = d[i+k-1][j+l-1] + mKnots[i+k-1][j+l-1] * w_kl;
+				w[i+k-1][j+l-1] += w_kl;				
+			}
+		}
+		/*--- DEBUG PRINT ---*
+		for (int b=0; b<NUM_KNOTS+3; b++) {
+			printf("b=%2d: ",b);
+			for (int a=0; a<NUM_KNOTS+3; a++)
+				printf("(%6.3f,%6.3f) ",mKnots[a][b].x,mKnots[a][b].y);
+			printf("\n");
+		}
+		*--- DEBUG PRINT ---*/
+	}
+	//-- Calculate the combined knots
+	for (int b=0; b<NUM_KNOTS+3; b++) {
+		for (int a=0; a<NUM_KNOTS+3; a++) {
+			if (w[a][b]!=0)
+				mKnots[a][b] = d[a][b] / w[a][b];
+			else
+				mKnots[a][b] = glm::vec2(0.0f,0.0f);
 		}
 	}
 	/*--- DEBUG PRINT ---*/
@@ -151,6 +184,7 @@ void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
 	}
 	/*--- DEBUG PRINT ---*/
 	// Re-evalute vertices positions 
+	float step = (mMax - mMin) / float(mSize);
 	glm::vec2 *ptr = mVertices;
 	for (int b=0; b<=mSize; b++) {
 		for (int a=0; a<=mSize; a++) {

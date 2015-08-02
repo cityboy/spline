@@ -8,6 +8,8 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <utility>
+#include <vector>
+#include "ControlPoint.hpp"
 
 #define NUM_KNOTS 5
 
@@ -17,7 +19,7 @@ public:
 	~Grid ();
 	void Initialise ();
 	void Display (int color=-1);
-	void Warp (std::pair<glm::vec2,glm::vec2> cp);
+	void Warp (std::vector<ControlPoint> cps);
 	
 private:
 	int mSize;

@@ -39,7 +39,7 @@ const char* fragment_shader =
 "}";
 
 Grid* grid;
-#define GRID_SZ 20
+#define GRID_SZ 50
 #define GRID_MIN -0.95f
 #define GRID_MAX 0.95f
 
@@ -143,6 +143,8 @@ void framebuffer_size_callback (GLFWwindow* window, int width, int height) {
 void key_callback (GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+		grid->Warp(controlPoints);
 }
 
 void cursor_pos_callback (GLFWwindow* window, double x, double y) {
@@ -177,10 +179,8 @@ void button_callback (GLFWwindow* window, int button, int action, int mods) {
 			ControlPoint ctrlPt = controlPoints.back();
 			if ((ctrlPt.Begin().x==sx) && (ctrlPt.Begin().y==sy))
 				controlPoints.pop_back();	// control point is invalid - DISCARD
-			else {
+			else 
 				controlPoints.back().SetEnd(sx,sy);
-				grid->Warp(std::make_pair(ctrlPt.Begin(),glm::vec2(sx,sy)));
-			}
 		}
 		std::cout << "R:" << x << "," << y << " -- " << sx << "," << sy << std::endl;
 		
