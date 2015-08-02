@@ -29,6 +29,11 @@ Grid::~Grid () {
 }
 
 void Grid::Initialise () {
+	//-- Initialise knot values
+	for (int i=0; i<NUM_KNOTS+3; i++)
+		for (int j=0; j<NUM_KNOTS+3; j++)
+			mKnots[i][j] = glm::vec2(0.0f,0.0f);
+
 	//-- Initialise vertex positions
 	float step = (mMax - mMin) / float(mSize);
 	
@@ -99,6 +104,19 @@ float B3 (float s) {
 	return (s*s*s/6.0f);
 }
 
+// Calculate embedding and index of embedding
+// Note: index of embedding starts from 0, which is different from the paper
+// i.e. Lower left corner of the selection area is (1,1). Upper right corner is (NUM_KNOTS+1,NUM_KNOTS+1)
+void Grid::Embedding (glm::vec2 pt, int& i, int& j, float& s, float& t) {
+	float step = (mMax - mMin) / float(NUM_KNOTS);
+	float ss = (pt.x - mMin) / step;
+	float tt = (pt.y - mMin) / step;
+	i = int(ss) + 1;
+	j = int(tt) + 1;
+	s = ss - float(i-1);
+	t = tt - float(j-1);
+}
+
 void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
 	glm::vec2 ctrlPt = shift.first;
 	glm::vec2 delta = shift.second - shift.first;
@@ -106,37 +124,49 @@ void Grid::Warp (std::pair<glm::vec2,glm::vec2> shift) {
 	float step = (mMax - mMin) / float(mSize);
 	printf("(%6.3f,%6.3f) (%6.3f,%6.3f) %6.3f\n",shift.first.x,shift.first.y,shift.second.x,shift.second.y,step);
 	
-	// Define vertex positions on the sides of the frame
-	glm::vec2 *ptr = mVertices;
-	for (int i=0; i<=mSize; i++) {
-		for (int j=0; j<=mSize; j++) {
-			ptr->x = mMin + step * float(j);	//-- x
-			ptr->y = mMin + step * float(i);	//-- y
-			ptr++;
-		}
-	}
 	// Calculate the embeddings
-	int i = int(ctrlPt.x/step) - 1;
-	int j = int(ctrlPt.y/step) - 1;
-	float s = ctrlPt.x/step - float(i);
-	float t = ctrlPt.y/step - float(j);
+	int i, j;
+	float s, t;
+	Embedding(ctrlPt, i, j, s, t);
 	printf("[%2d,%2d] (%6.3f,%6.3f)\n",i,j,s,t);
 	// Calculate basis values
 	float bs[] = { B0(s), B1(s), B2(s), B3(s) };
 	float bt[] = { B0(t), B1(t), B2(t), B3(t) };
 	float sum_w_sq = 0.0f;
-	for (int a=0; a<=3; a++)
-		for (int b=0; b<=3; b++)
+	for (int b=0; b<=3; b++)
+		for (int a=0; a<=3; a++)
 			sum_w_sq += bs[a]*bs[a]*bt[b]*bt[b];
 	// Calculate the shift of 16 neighborhood
-	glm::vec2 move;
-	for (int k=0; k<=3; k++) {
-		for (int l=0; l<=3; l++) {
-			ptr = mVertices + (i+l) + (j+k)*(mSize+1);
-			move = delta * bs[k]*bt[l]/sum_w_sq;
-			*ptr = *ptr + move;
+	for (int l=0; l<=3; l++) {
+		for (int k=0; k<=3; k++) {
+			mKnots[i+k-1][j+l-1] = mKnots[i+k-1][j+l-1] + delta * bs[k]*bt[l]/sum_w_sq;
 		}
 	}
+	/*--- DEBUG PRINT ---*/
+	for (int b=0; b<NUM_KNOTS+3; b++) {
+		printf("b=%2d: ",b);
+		for (int a=0; a<NUM_KNOTS+3; a++)
+			printf("(%6.3f,%6.3f) ",mKnots[a][b].x,mKnots[a][b].y);
+		printf("\n");
+	}
+	/*--- DEBUG PRINT ---*/
+	// Re-evalute vertices positions 
+	glm::vec2 *ptr = mVertices;
+	for (int b=0; b<=mSize; b++) {
+		for (int a=0; a<=mSize; a++) {
+			ptr->x = mMin + step * float(b);
+			ptr->y = mMin + step * float(a);
+			Embedding(*ptr, i, j, s, t);
+			bs[0] = B0(s); bs[1] = B1(s); bs[2] = B2(s); bs[3] = B3(s);
+			bt[0] = B0(t); bt[1] = B1(t); bt[2] = B2(t); bt[3] = B3(t);
+			for (int l=0; l<=3; l++) {
+				for (int k=0; k<=3; k++) {
+					*ptr = *ptr + mKnots[i+k-1][j+l-1] * bs[k]*bt[l];
+				}
+			}
+			ptr++;
+		}
+	}	
 
 	glBindBuffer(GL_ARRAY_BUFFER, mVbo[0]);
 	glBufferData(GL_ARRAY_BUFFER, mVerticesSize * sizeof(glm::vec2), mVertices, GL_STATIC_DRAW);

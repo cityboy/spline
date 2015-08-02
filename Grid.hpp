@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 #include <utility>
 
+#define NUM_KNOTS 5
+
 class Grid {
 public:
 	Grid (unsigned int sz, float min=-1.0f, float max=1.0f);
@@ -23,8 +25,10 @@ private:
 	glm::vec2* mVertices;
 	unsigned int* mIndices;
 	unsigned int mVerticesSize, mIndicesSize;
+	glm::vec2 mKnots[NUM_KNOTS+3][NUM_KNOTS+3];
 	GLuint mVao;
 	GLuint mVbo[2];
+	void Embedding (glm::vec2 pt, int& i, int& j, float& s, float& t); 
 };
 
 #endif
