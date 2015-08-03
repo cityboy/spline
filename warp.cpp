@@ -45,7 +45,7 @@ Grid* grid;
 
 std::vector<ControlPoint> controlPoints;
 
-void framebuffer_size_callback(GLFWwindow*, int, int);
+void window_size_callback(GLFWwindow*, int, int);
 void key_callback (GLFWwindow*, int, int, int, int);
 void cursor_pos_callback (GLFWwindow*, double, double);
 void button_callback (GLFWwindow*, int, int, int);
@@ -75,7 +75,7 @@ int main( void )
 	}
 	glfwMakeContextCurrent(window);
 
-	glfwSetFramebufferSizeCallback(window,framebuffer_size_callback);
+	glfwSetWindowSizeCallback(window,window_size_callback);
 	glfwSetKeyCallback(window,key_callback);
 	//glfwSetCursorPosCallback(window,cursor_pos_callback);
 	glfwSetMouseButtonCallback(window,button_callback);
@@ -135,7 +135,7 @@ int main( void )
 //---------------------------------
 // Supporting call-back functions
 //---------------------------------
-void framebuffer_size_callback (GLFWwindow* window, int width, int height) {
+void window_size_callback (GLFWwindow* window, int width, int height) {
 	win_width = (double)width;
 	win_height = (double)height;
 }
