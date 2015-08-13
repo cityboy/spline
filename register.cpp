@@ -20,50 +20,11 @@ float g_WindowWidth = 800.0f;
 float g_WindowHeight = 800.0f;
 #define BORDER 5
 
-const char* passthrough_vertex_shader =
-"#version 400\n"
-"layout(location=0) in vec3 vp;\n"
-"layout(location=1) in vec2 vUV;\n"
-"out vec2 UV;\n"
-"void main () {\n"
-"  gl_Position = vec4 (vp, 1.0);\n"
-"  UV = vUV;\n"
-"}";
-const char* passthrough_fragment_shader =
-"#version 400\n"
-"in vec2 UV;\n"
-"out vec4 frag_colour;\n"
-"uniform sampler2D TextureSampler;\n"
-"void main () {\n"
-"float color = texture(TextureSampler,UV).r;\n"
-"  frag_colour = vec4(color,color,color,1.0f);\n"
-"}";
-
-const char* diff_vertex_shader =
-"#version 400\n"
-"layout(location=0) in vec3 vp;\n"
-"layout(location=1) in vec2 vUV;\n"
-"out vec2 UV;\n"
-"void main () {\n"
-"  gl_Position = vec4 (vp, 1.0);\n"
-"  UV = vUV;\n"
-"}";
-const char* diff_fragment_shader =
-"#version 400\n"
-"in vec2 UV;\n"
-"layout(location=0) out vec4 frag_colour;\n"
-"uniform sampler2D SourceTextureSampler;\n"
-"uniform sampler2D TargetTextureSampler;\n"
-"void main () {\n"
-"float color = texture(SourceTextureSampler,UV).r - texture(TargetTextureSampler,UV).r;\n"
-"	color = color * color;\n"
-"  frag_colour = vec4(color,0.0f,0.0f,1.0f);\n"
-"}";
-
 void CallbackWindowSize (GLFWwindow*, int, int);
 void CallbackKey (GLFWwindow*, int, int, int, int);
 void CallbackCursonPos (GLFWwindow*, double, double);
 void CallbackButton (GLFWwindow*, int, int, int);
+int ReadFile (const char *filename, char **buffer);
 GLuint LoadShader  (const char *vertex_shader, const char *fragment_shader);
 GLuint LoadBmpTexture (const char* bmpfilename);
 GLuint LoadJpegTexture (const char* jpegfilename, int* width=NULL, int* height=NULL);
@@ -94,16 +55,18 @@ int main (int argc, char** argv)
 	}
 
 	// Create and compile our GLSL program from the shaders
-	GLuint diff_shader = LoadShader(diff_vertex_shader, diff_fragment_shader);
-	GLuint srcSampler  = glGetUniformLocation(diff_shader, "SourceTextureSampler");
-	GLuint tgtSampler  = glGetUniformLocation(diff_shader, "TargetTextureSampler");
+	GLuint transform_shader = LoadShader("Affine.vert", "Affine.frag");
+	GLuint srcSampler  = glGetUniformLocation(transform_shader, "SourceTextureSampler");
+	GLuint tgtSampler  = glGetUniformLocation(transform_shader, "TargetTextureSampler");
+	GLuint params  = glGetUniformLocation(transform_shader, "params");
 
-	GLuint pass_shader = LoadShader(passthrough_vertex_shader, passthrough_fragment_shader);
+	GLuint pass_shader = LoadShader("PassThrough.vert", "PassThrough.frag");
 	GLuint texSampler  = glGetUniformLocation(pass_shader, "TextureSampler");
 
 	// Variables for source and target images
 	GLuint srcTexture, tgtTexture;
 	int srcWidth, srcHeight, tgtWidth, tgtHeight;
+	//GLFWwindow *srcWindow, *tgtWindow;
 
 	// Load images as textures
 	if (argc>1) 
@@ -168,31 +131,65 @@ int main (int argc, char** argv)
 	// Dark blue background
 	glClearColor(0.0f, 0.0f, 0.2f, 0.0f);
 
-	while( !glfwWindowShouldClose(g_MainWindow) ) {
-		
-		// Render to our framebuffer
-		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
+	int fbw, fbh;
+	// Create and display difference
+    glfwMakeContextCurrent(g_MainWindow);
+	
+	// Render to our framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	glUseProgram(transform_shader);
+	// Enable Texture
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, srcTexture);
+	glUniform1i(srcSampler,0);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, tgtTexture);
+	glUniform1i(tgtSampler,1);
+	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.0f, 0.0f};
+	//glUniform1fv(params,6,affine);
+	// Draw square
+	glBindVertexArray(frameVAO);
+	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
+
+	// Render to the screen
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glfwGetFramebufferSize(g_MainWindow,&fbw,&fbh); // Get window size in Pixels
+	glViewport(0,0,fbw,fbh);
+
+
+	while (!glfwWindowShouldClose(g_MainWindow)) {
+		/*
+		// Display source image
+	    glfwMakeContextCurrent(srcWindow);
+		// Render to the screen
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glfwGetFramebufferSize(srcWindow,&fbw,&fbh); // Get window size in Pixels
+		glViewport(0,0,fbw,fbh);
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f);
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glUseProgram(diff_shader);
+		glUseProgram(pass_shader);
 		// Enable Texture
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, srcTexture);
-		glUniform1i(srcSampler,0);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, tgtTexture);
-		glUniform1i(tgtSampler,1);
+		glUniform1i(texSampler,0);
+
 		// Draw square
 		glBindVertexArray(frameVAO);
-		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
-
-		// Render to the screen
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		int fbw, fbh;
-		glfwGetFramebufferSize(g_MainWindow,&fbw,&fbh); // Get window size in Pixels
-		glViewport(0,0,fbw,fbh);
+		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);		
+		*/
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glUseProgram(pass_shader);
@@ -213,7 +210,7 @@ int main (int argc, char** argv)
 	glGenerateMipmap(GL_TEXTURE_2D);
 
 	// Get texture data
-	unsigned char texdata[500000];
+	float texdata[10000];
 	int w,h;
 	for (int i=5; i<10; i++) {
 		glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_WIDTH,&w);
@@ -221,10 +218,10 @@ int main (int argc, char** argv)
 		printf("\n>> %d %d %d\n",i,w,h);
 		if ((w<1)||(h<1))
 			break;
-		glGetTexImage(GL_TEXTURE_2D,i,GL_RGBA,GL_UNSIGNED_BYTE,texdata);
+		glGetTexImage(GL_TEXTURE_2D,i,GL_RGBA,GL_FLOAT,texdata);
 		//glGetTextureImage(diffTexture,i,GL_RGB,GL_UNSIGNED_BYTE,256,texdata);
 		for (int n=0; n<w*h; n++)
-			printf("%4d %3d %3d %3d %3d\n",(n/w),texdata[n*4],texdata[n*4+1],texdata[n*4+2],texdata[n*4+3]);
+			printf("%4d %9.7f %9.7f %9.7f %9.7f\n",(n/w),texdata[n*4],texdata[n*4+1],texdata[n*4+2],texdata[n*4+3]);
 	}
 
 
@@ -265,12 +262,38 @@ void CallbackButton (GLFWwindow* window, int button, int action, int mods) {
 	} 
 }
 
+//-- Read content of file 
+int ReadFile (const char *filename, char **buffer) {
+	FILE *fp;
+	int fsize;
+
+	fp = fopen(filename,"rb");
+	if (fp==NULL)
+		return 0;
+	//-- Find file size
+	fseek(fp, 0, SEEK_END); 
+	fsize = ftell(fp); 
+	fseek(fp, 0, SEEK_SET);
+	//-- Allocate memory to keep to content
+	if (*buffer!=NULL)
+		free(*buffer);
+	*buffer = (char*)malloc(fsize+1);
+	//-- Read file content
+	fread(*buffer, 1, fsize, fp);
+	(*buffer)[fsize] = 0;
+	//-- Close file and return file size
+	fclose(fp);
+	return fsize;
+}
+
 GLuint LoadShader (const char *vertex_shader, const char *fragment_shader) {
+	char *shader_code;
 	GLint blen=0;
 	GLsizei slen=0;
 	
+	ReadFile(vertex_shader,&shader_code);
     GLuint vs = glCreateShader (GL_VERTEX_SHADER);
-    glShaderSource (vs, 1, &vertex_shader, NULL);
+    glShaderSource (vs, 1, &shader_code, NULL);
     glCompileShader (vs);
 	glGetShaderiv(vs, GL_INFO_LOG_LENGTH , &blen);       
 	if (blen > 1) {
@@ -280,8 +303,11 @@ GLuint LoadShader (const char *vertex_shader, const char *fragment_shader) {
 		free (compiler_log);
 		return(0);
 	}
+	//free (shader_code); //-- unable to free memory allocated in other part of the code
+
+	ReadFile(fragment_shader,&shader_code);
     GLuint fs = glCreateShader (GL_FRAGMENT_SHADER);
-    glShaderSource (fs, 1, &fragment_shader, NULL);
+    glShaderSource (fs, 1, &shader_code, NULL);
     glCompileShader (fs);
 	glGetShaderiv(fs, GL_INFO_LOG_LENGTH , &blen);       
 	if (blen > 1) {
@@ -291,6 +317,8 @@ GLuint LoadShader (const char *vertex_shader, const char *fragment_shader) {
 		free (compiler_log);
 		return(0);
 	}
+	//free (shader_code); //-- unable to free memory allocated in other part of the code
+
     GLuint shader_programme = glCreateProgram ();
     glAttachShader (shader_programme, fs);
     glAttachShader (shader_programme, vs);
