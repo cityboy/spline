@@ -6,6 +6,7 @@ uniform sampler2D SourceTextureSampler;
 uniform sampler2D TargetTextureSampler;
 // Transformation parameters. Default = identity
 uniform float params[6] = float[](1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);  // 2x3 matrix, column first
+uniform int sqdiff = 1;	// switch to turn on/off squared difference
 
 void main () {
 	// Contruct 3x3 transformation matrix
@@ -16,9 +17,15 @@ void main () {
 	// Blank the image if it transforms outside the texture
 	if ((transformed.x<0.0f)||(transformed.x>1.0f)||(transformed.y<0.0f)||(transformed.y>1.0f))
 		color = 0.0f;
-	else
-		color = texture(SourceTextureSampler,transformed.xy).r - texture(TargetTextureSampler,UV).r;
-	color = color * color;
+	else {
+		if (sqdiff!=0) {
+			color = texture(SourceTextureSampler,transformed.xy).r - texture(TargetTextureSampler,UV).r;
+			color = color * color;
+		} else {
+			color = texture(SourceTextureSampler,transformed.xy).r;
+			//color = texture(TargetTextureSampler,UV).r;
+		}
+	}
 	// Return the squared difference 
 	frag_colour = vec4(color,0.0f,0.0f,1.0f);
 }

@@ -19,6 +19,8 @@ char g_WindowTitle[] = "REGISTER";
 float g_WindowWidth = 800.0f;
 float g_WindowHeight = 800.0f;
 #define BORDER 5
+#define DELTA 0.001f
+#define ALPHA 10.0f
 
 void CallbackWindowSize (GLFWwindow*, int, int);
 void CallbackKey (GLFWwindow*, int, int, int, int);
@@ -54,12 +56,14 @@ int main (int argc, char** argv)
 		return -1;
 	}
 
-	// Create and compile our GLSL program from the shaders
+	// Create and compile our GLSL program from the shaders for Affine transform and calculate SSD
 	GLuint transform_shader = LoadShader("Affine.vert", "Affine.frag");
 	GLuint srcSampler  = glGetUniformLocation(transform_shader, "SourceTextureSampler");
 	GLuint tgtSampler  = glGetUniformLocation(transform_shader, "TargetTextureSampler");
 	GLuint params  = glGetUniformLocation(transform_shader, "params");
+	GLuint sqdiff  = glGetUniformLocation(transform_shader, "sqdiff");
 
+	// Shader to passthough texture for displaying the final processed image
 	GLuint pass_shader = LoadShader("PassThrough.vert", "PassThrough.frag");
 	GLuint texSampler  = glGetUniformLocation(pass_shader, "TextureSampler");
 
@@ -68,17 +72,17 @@ int main (int argc, char** argv)
 	int srcWidth, srcHeight, tgtWidth, tgtHeight;
 	//GLFWwindow *srcWindow, *tgtWindow;
 
-	// Load images as textures
+	// Load images from files as textures
 	if (argc>1) 
 		srcTexture = LoadJpegTexture(argv[1], &srcWidth, &srcHeight);
 	else 
 		srcTexture = LoadJpegTexture("sh0r.jpg", &srcWidth, &srcHeight);
-
 	if (argc>2) 
 		tgtTexture = LoadJpegTexture(argv[2], &tgtWidth, &tgtHeight);
 	else 
 		tgtTexture = LoadJpegTexture("sh1r.jpg", &tgtWidth, &tgtHeight);
-	
+
+	// Set windows parameteres
 	printf("Image size (WxH) = %d,%d\n",srcWidth,srcHeight);
 	glfwSetWindowSize(g_MainWindow, srcWidth+2*BORDER, srcHeight+2*BORDER);
 
@@ -90,13 +94,14 @@ int main (int argc, char** argv)
 	// Ensure we can capture the escape key being pressed below
 	//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 
-	// Create frame to show image
+	// Create frame VAO to display image
 	GLuint frameVAO = CreateFrame(srcWidth,srcHeight,BORDER);
 	
+	// Create texture for receiving the rendered image
 	GLuint diffTexture;
 	glGenTextures(1, &diffTexture);
 	glBindTexture(GL_TEXTURE_2D, diffTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, srcWidth, srcHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, srcWidth, srcHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
 	//glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // MIPMAP must exist otherwise this will not work - black screen
@@ -114,7 +119,6 @@ int main (int argc, char** argv)
 	// Either of the following works
 	//glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, diffTexture, 0);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, diffTexture, 0); 
-
 	// check FBO status
 	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 	if(status != GL_FRAMEBUFFER_COMPLETE) {
@@ -132,7 +136,7 @@ int main (int argc, char** argv)
 	glClearColor(0.0f, 0.0f, 0.2f, 0.0f);
 
 	int fbw, fbh;
-	// Create and display difference
+	// For multi-window display
     glfwMakeContextCurrent(g_MainWindow);
 	
 	// Render to our framebuffer
@@ -143,7 +147,6 @@ int main (int argc, char** argv)
 	glOrtho(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(transform_shader);
 	// Enable Texture
@@ -153,10 +156,57 @@ int main (int argc, char** argv)
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, tgtTexture);
 	glUniform1i(tgtSampler,1);
-	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.0f, 0.0f};
-	//glUniform1fv(params,6,affine);
-	// Draw square
+
+	float affine[6] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};		// inital value - no transform
+	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.2f, 0.0f};
+	float f[7];
+	int iter = 0;
+	// Switch to another texture - avoid affecting Texture 0 & 1
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, diffTexture);
 	glBindVertexArray(frameVAO);
+	glUniform1i(sqdiff,1);
+	do {
+		for (int p=0; p<=6; p++) {
+			// Differentiate numerically
+			if (p!=0)
+				affine[p-1] += DELTA;
+			// Set transform parameters
+			glUniform1fv(params,6,affine);
+			// Draw square
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
+
+			glGenerateMipmap(GL_TEXTURE_2D);
+			float texdata[4];
+			int w,h;
+			for (int i=0; i<10; i++) {
+				glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_WIDTH,&w);
+				glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_HEIGHT,&h);
+				if ((w==1)&&(h==1)) {
+					//glGetTextureImage(diffTexture,i,GL_RGB,GL_UNSIGNED_BYTE,256,texdata);
+					glGetTexImage(GL_TEXTURE_2D,i,GL_RGBA,GL_FLOAT,texdata);
+					printf("%4d %9.7f %9.7f %9.7f %9.7f\n",i,texdata[0],texdata[1],texdata[2],texdata[3]);
+					break;
+				}
+			}
+			// Store SSD
+			f[p] = texdata[0];
+			// Restore to original value
+			if (p!=0)
+				affine[p-1] -= DELTA;
+		}
+		// adjust parameters using gradient descent
+		for (int p=0; p<6; p++) {
+			affine[p] -= ALPHA * (f[p+1] - f[0]);
+		}
+		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,f[0],affine[0],affine[1],affine[2],affine[3],affine[4],affine[5]);
+		iter++;
+	} while (iter<50);
+	// Re-generate image without SSD
+	//glBindVertexArray(frameVAO);	//-- still enabled, no need to call again
+	glUniform1i(sqdiff,0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
 
 	// Render to the screen
@@ -166,30 +216,6 @@ int main (int argc, char** argv)
 
 
 	while (!glfwWindowShouldClose(g_MainWindow)) {
-		/*
-		// Display source image
-	    glfwMakeContextCurrent(srcWindow);
-		// Render to the screen
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glfwGetFramebufferSize(srcWindow,&fbw,&fbh); // Get window size in Pixels
-		glViewport(0,0,fbw,fbh);
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		glOrtho(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f);
-		glMatrixMode(GL_MODELVIEW);
-		glLoadIdentity();
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		glUseProgram(pass_shader);
-		// Enable Texture
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, srcTexture);
-		glUniform1i(texSampler,0);
-
-		// Draw square
-		glBindVertexArray(frameVAO);
-		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);		
-		*/
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glUseProgram(pass_shader);
@@ -207,23 +233,6 @@ int main (int argc, char** argv)
 		glfwPollEvents();
 
 	} 
-	glGenerateMipmap(GL_TEXTURE_2D);
-
-	// Get texture data
-	float texdata[10000];
-	int w,h;
-	for (int i=5; i<10; i++) {
-		glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_WIDTH,&w);
-		glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_HEIGHT,&h);
-		printf("\n>> %d %d %d\n",i,w,h);
-		if ((w<1)||(h<1))
-			break;
-		glGetTexImage(GL_TEXTURE_2D,i,GL_RGBA,GL_FLOAT,texdata);
-		//glGetTextureImage(diffTexture,i,GL_RGB,GL_UNSIGNED_BYTE,256,texdata);
-		for (int n=0; n<w*h; n++)
-			printf("%4d %9.7f %9.7f %9.7f %9.7f\n",(n/w),texdata[n*4],texdata[n*4+1],texdata[n*4+2],texdata[n*4+3]);
-	}
-
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
@@ -465,9 +474,9 @@ GLuint LoadJpegTexture (const char* jpegfilename, int* width, int* height) {
 
 	// Give the image to OpenGL
 	if (cinfo.num_components==1)
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cinfo.image_width, cinfo.image_height, 0, GL_RED	, GL_UNSIGNED_BYTE, data);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, cinfo.image_width, cinfo.image_height, 0, GL_RED	, GL_UNSIGNED_BYTE, data);
 	else 
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, cinfo.image_width, cinfo.image_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, cinfo.image_width, cinfo.image_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
 	// OpenGL has now copied the data. Free our own version
 	delete [] data;
