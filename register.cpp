@@ -18,9 +18,9 @@ GLFWwindow* g_MainWindow;
 char g_WindowTitle[] = "REGISTER";
 float g_WindowWidth = 800.0f;
 float g_WindowHeight = 800.0f;
-#define BORDER 5
-#define DELTA 0.001f
-#define ALPHA 10.0f
+#define BORDER 0
+#define DELTA 0.01f
+#define ALPHA 0.3f
 
 void CallbackWindowSize (GLFWwindow*, int, int);
 void CallbackKey (GLFWwindow*, int, int, int, int);
@@ -32,6 +32,7 @@ GLuint LoadBmpTexture (const char* bmpfilename);
 GLuint LoadJpegTexture (const char* jpegfilename, int* width=NULL, int* height=NULL);
 GLFWwindow* CreateWindow (const char* title, const int width, const int height);
 GLuint CreateFrame (int width, int height, int border);
+float MeanTexture();
 
 int main (int argc, char** argv)
 {
@@ -138,6 +139,7 @@ int main (int argc, char** argv)
 	int fbw, fbh;
 	// For multi-window display
     glfwMakeContextCurrent(g_MainWindow);
+	glfwGetFramebufferSize(g_MainWindow,&fbw,&fbh); // Get window size in Pixels
 	
 	// Render to our framebuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -159,52 +161,72 @@ int main (int argc, char** argv)
 
 	float affine[6] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};		// inital value - no transform
 	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.2f, 0.0f};
-	float f[7];
+	float f[7], m[7];
 	int iter = 0;
 	// Switch to another texture - avoid affecting Texture 0 & 1
+	glBindVertexArray(frameVAO);
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, diffTexture);
-	glBindVertexArray(frameVAO);
-	glUniform1i(sqdiff,1);
 	do {
+
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
+		glUniform1i(sqdiff,1);
+
 		for (int p=0; p<=6; p++) {
 			// Differentiate numerically
-			if (p!=0)
-				affine[p-1] += DELTA;
+			if (p!=6)
+				affine[p] += DELTA;
 			// Set transform parameters
 			glUniform1fv(params,6,affine);
 			// Draw square
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
-
+			// Store SSD - using mean instead of sum to scale the value down
+			m[p] = MeanTexture();
+			
+			//- Calculate mean value using MipMap does not work 
+/*---- TODO: try to derive mean using GPU
 			glGenerateMipmap(GL_TEXTURE_2D);
-			float texdata[4];
+			float texdata;
 			int w,h;
 			for (int i=0; i<10; i++) {
 				glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_WIDTH,&w);
 				glGetTexLevelParameteriv(GL_TEXTURE_2D,i,GL_TEXTURE_HEIGHT,&h);
 				if ((w==1)&&(h==1)) {
 					//glGetTextureImage(diffTexture,i,GL_RGB,GL_UNSIGNED_BYTE,256,texdata);
-					glGetTexImage(GL_TEXTURE_2D,i,GL_RGBA,GL_FLOAT,texdata);
-					printf("%4d %9.7f %9.7f %9.7f %9.7f\n",i,texdata[0],texdata[1],texdata[2],texdata[3]);
+					glGetTexImage(GL_TEXTURE_2D,i,GL_RED,GL_FLOAT,&texdata);
+					printf("%4d %4d %9.7f %9.7f\n",p,i,m[p],texdata);
 					break;
 				}
 			}
 			// Store SSD
-			f[p] = texdata[0];
+			f[p] = texdata;
+----*/
 			// Restore to original value
-			if (p!=0)
-				affine[p-1] -= DELTA;
+			if (p!=6)
+				affine[p] -= DELTA;
 		}
 		// adjust parameters using gradient descent
 		for (int p=0; p<6; p++) {
-			affine[p] -= ALPHA * (f[p+1] - f[0]);
+			affine[p] -= ALPHA * (m[p] - m[6]);
 		}
-		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,f[0],affine[0],affine[1],affine[2],affine[3],affine[4],affine[5]);
+		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[6],affine[0],affine[1],affine[2],affine[3],affine[4],affine[5]);
 		iter++;
-	} while (iter<50);
+
+		// Render to the screen
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0,0,fbw,fbh);
+		glUniform1i(sqdiff,1);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
+		// Swap buffers
+		glfwSwapBuffers(g_MainWindow);
+
+	} while (iter<500);
 	// Re-generate image without SSD
-	//glBindVertexArray(frameVAO);	//-- still enabled, no need to call again
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
 	glUniform1i(sqdiff,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
@@ -500,10 +522,10 @@ GLuint CreateFrame (int width, int height, int border) {
 		0, 1, 2, 3
 	};
 	static GLfloat square_vertex[] = {
-		-0.9f, -0.9f, 0.0f,
-		 0.9f, -0.9f, 0.0f, 
-		 0.9f,  0.9f, 0.0f, 
-		-0.9f,  0.9f, 0.0f
+		-1.0f, -1.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f, 
+		 1.0f,  1.0f, 0.0f, 
+		-1.0f,  1.0f, 0.0f
 	};
 	static GLfloat square_uv[] = {
 		0.0f, 0.0f,
@@ -511,7 +533,7 @@ GLuint CreateFrame (int width, int height, int border) {
 		1.0f, 1.0f,
 		0.0f, 1.0f
 	};
-	
+	/*
 	float rel_width = float(width) / float(width + 2*border);
 	float rel_height = float(height) / float(height + 2*border);
 	square_vertex[0] = -rel_width;
@@ -522,7 +544,7 @@ GLuint CreateFrame (int width, int height, int border) {
 	square_vertex[7] =  rel_height;
 	square_vertex[9] = -rel_width;
 	square_vertex[10] = rel_height;
-	
+	*/
 	GLuint squareVao;
 	glGenVertexArrays(1, &squareVao);
 	glBindVertexArray(squareVao);
@@ -547,4 +569,17 @@ GLuint CreateFrame (int width, int height, int border) {
 	return squareVao;
 }
 
+float MeanTexture() {
+	int w,h,l;
+	float texdata[300000];
+	float sum=0.0f;
+	glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_WIDTH,&w);
+	glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_HEIGHT,&h);
+	glGetTexImage(GL_TEXTURE_2D,0,GL_RED,GL_FLOAT,texdata);
+	l = w * h;
+	for (int i=0; i<l; i++)
+		sum += texdata[i];
+	return sum/float(l);
+
+}
 

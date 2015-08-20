@@ -16,7 +16,7 @@ void main () {
 	float color;
 	// Blank the image if it transforms outside the texture
 	if ((transformed.x<0.0f)||(transformed.x>1.0f)||(transformed.y<0.0f)||(transformed.y>1.0f))
-		color = 0.0f;
+		color = 0.2f;
 	else {
 		if (sqdiff!=0) {
 			color = texture(SourceTextureSampler,transformed.xy).r - texture(TargetTextureSampler,UV).r;
@@ -27,5 +27,5 @@ void main () {
 		}
 	}
 	// Return the squared difference 
-	frag_colour = vec4(color,0.0f,0.0f,1.0f);
+	frag_colour = vec4(color,color,color,1.0f);
 }
