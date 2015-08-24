@@ -10,6 +10,7 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 #include <jpeglib.h>
 #include <jerror.h>
 
@@ -18,8 +19,8 @@ GLFWwindow* g_MainWindow;
 char g_WindowTitle[] = "REGISTER";
 float g_WindowWidth = 800.0f;
 float g_WindowHeight = 800.0f;
-#define BORDER 0
-#define DELTA 0.01f
+#define NUM_KNOTS 8
+#define DELTA 0.1f
 #define ALPHA 0.3f
 
 void CallbackWindowSize (GLFWwindow*, int, int);
@@ -31,7 +32,7 @@ GLuint LoadShader  (const char *vertex_shader, const char *fragment_shader);
 GLuint LoadBmpTexture (const char* bmpfilename);
 GLuint LoadJpegTexture (const char* jpegfilename, int* width=NULL, int* height=NULL);
 GLFWwindow* CreateWindow (const char* title, const int width, const int height);
-GLuint CreateFrame (int width, int height, int border);
+GLuint CreateFrame (int width, int height);
 float MeanTexture();
 
 int main (int argc, char** argv)
@@ -58,15 +59,16 @@ int main (int argc, char** argv)
 	}
 
 	// Create and compile our GLSL program from the shaders for Affine transform and calculate SSD
-	GLuint transform_shader = LoadShader("Affine.vert", "Affine.frag");
-	GLuint srcSampler  = glGetUniformLocation(transform_shader, "SourceTextureSampler");
-	GLuint tgtSampler  = glGetUniformLocation(transform_shader, "TargetTextureSampler");
-	GLuint params  = glGetUniformLocation(transform_shader, "params");
-	GLuint sqdiff  = glGetUniformLocation(transform_shader, "sqdiff");
+	GLuint transform_shader = LoadShader("Bspline.vert", "Bspline.frag");
+	GLuint srctex_id  = glGetUniformLocation(transform_shader, "SourceTextureSampler");
+	GLuint tgttex_id  = glGetUniformLocation(transform_shader, "TargetTextureSampler");
+	GLuint numknots_id  = glGetUniformLocation(transform_shader, "numknots");
+	GLuint knots_id  = glGetUniformLocation(transform_shader, "knots");
+	GLuint sqdiff_id  = glGetUniformLocation(transform_shader, "sqdiff");
 
 	// Shader to passthough texture for displaying the final processed image
 	GLuint pass_shader = LoadShader("PassThrough.vert", "PassThrough.frag");
-	GLuint texSampler  = glGetUniformLocation(pass_shader, "TextureSampler");
+	GLuint tex_id  = glGetUniformLocation(pass_shader, "TextureSampler");
 
 	// Variables for source and target images
 	GLuint srcTexture, tgtTexture;
@@ -85,7 +87,7 @@ int main (int argc, char** argv)
 
 	// Set windows parameteres
 	printf("Image size (WxH) = %d,%d\n",srcWidth,srcHeight);
-	glfwSetWindowSize(g_MainWindow, srcWidth+2*BORDER, srcHeight+2*BORDER);
+	glfwSetWindowSize(g_MainWindow, srcWidth, srcHeight);
 
 	glfwMakeContextCurrent(g_MainWindow);
 	glfwSetWindowSizeCallback(g_MainWindow,CallbackWindowSize);
@@ -96,13 +98,14 @@ int main (int argc, char** argv)
 	//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 
 	// Create frame VAO to display image
-	GLuint frameVAO = CreateFrame(srcWidth,srcHeight,BORDER);
+	GLuint frameVAO = CreateFrame(srcWidth,srcHeight);
 	
 	// Create texture for receiving the rendered image
 	GLuint diffTexture;
 	glGenTextures(1, &diffTexture);
 	glBindTexture(GL_TEXTURE_2D, diffTexture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, srcWidth, srcHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
+	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
 	//glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // MIPMAP must exist otherwise this will not work - black screen
@@ -154,39 +157,46 @@ int main (int argc, char** argv)
 	// Enable Texture
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, srcTexture);
-	glUniform1i(srcSampler,0);
+	glUniform1i(srctex_id,0);
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, tgtTexture);
-	glUniform1i(tgtSampler,1);
+	glUniform1i(tgttex_id,1);
 
-	float affine[6] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};		// inital value - no transform
-	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.2f, 0.0f};
-	float f[7], m[7];
-	int iter = 0;
+	// Define variables for knots
+	glUniform2i(numknots_id,NUM_KNOTS,NUM_KNOTS);
+	float knots[(NUM_KNOTS+2)*(NUM_KNOTS+3)*2];
+	for (int i=0; i<(NUM_KNOTS+2)*(NUM_KNOTS+3)*2; i++)
+		knots[i] = 0.0f;
+	//knots[39] = 0.1f;
+	//knots[40] = -0.2f;
+	glUniform2fv(knots_id,(NUM_KNOTS+2)*(NUM_KNOTS+3),(GLfloat *)knots);
+	float m[(NUM_KNOTS+2)*(NUM_KNOTS+3)*2+1];
 	// Switch to another texture - avoid affecting Texture 0 & 1
 	glBindVertexArray(frameVAO);
 	glActiveTexture(GL_TEXTURE2);
 	glBindTexture(GL_TEXTURE_2D, diffTexture);
+
+	int iter = 0;
 	do {
 
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
-		glUniform1i(sqdiff,1);
+		glUniform1i(sqdiff_id,1);
 
-		for (int p=0; p<=6; p++) {
+		for (int p=0; p<=(NUM_KNOTS+2)*(NUM_KNOTS+3)*2+1; p++) {
 			// Differentiate numerically
-			if (p!=6)
-				affine[p] += DELTA;
+			if (p!=0)
+				knots[p-1] += DELTA;
 			// Set transform parameters
-			glUniform1fv(params,6,affine);
+			glUniform2fv(knots_id,(NUM_KNOTS+2)*(NUM_KNOTS+3),(GLfloat *)knots);
 			// Draw square
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
 			// Store SSD - using mean instead of sum to scale the value down
 			m[p] = MeanTexture();
-			
+
 			//- Calculate mean value using MipMap does not work 
-/*---- TODO: try to derive mean using GPU
+/*---- TODO: try to derive mean using GPU ---
 			glGenerateMipmap(GL_TEXTURE_2D);
 			float texdata;
 			int w,h;
@@ -196,38 +206,40 @@ int main (int argc, char** argv)
 				if ((w==1)&&(h==1)) {
 					//glGetTextureImage(diffTexture,i,GL_RGB,GL_UNSIGNED_BYTE,256,texdata);
 					glGetTexImage(GL_TEXTURE_2D,i,GL_RED,GL_FLOAT,&texdata);
-					printf("%4d %4d %9.7f %9.7f\n",p,i,m[p],texdata);
 					break;
 				}
 			}
 			// Store SSD
 			f[p] = texdata;
+			printf("%4d %9.7f %9.7f\n",p,m[p],f[p]);
 ----*/
+
 			// Restore to original value
-			if (p!=6)
-				affine[p] -= DELTA;
+			if (p!=0)
+				knots[p-1] -= DELTA;
 		}
 		// adjust parameters using gradient descent
-		for (int p=0; p<6; p++) {
-			affine[p] -= ALPHA * (m[p] - m[6]);
+		for (int p=0; p<(NUM_KNOTS+2)*(NUM_KNOTS+3)*2; p++) {
+			knots[p] -= ALPHA * (m[p+1] - m[0]);
 		}
-		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[6],affine[0],affine[1],affine[2],affine[3],affine[4],affine[5]);
+		printf("%3d (%9.7f)\n",iter,m[0]);
 		iter++;
 
 		// Render to the screen
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glViewport(0,0,fbw,fbh);
-		glUniform1i(sqdiff,1);
+		glUniform1i(sqdiff_id,1);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
 		// Swap buffers
 		glfwSwapBuffers(g_MainWindow);
 
-	} while (iter<500);
+	} while (iter<200);
+
 	// Re-generate image without SSD
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
-	glUniform1i(sqdiff,0);
+	glUniform1i(sqdiff_id,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
 
@@ -244,7 +256,7 @@ int main (int argc, char** argv)
 		// Enable Texture
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, diffTexture);
-		glUniform1i(texSampler,0);
+		glUniform1i(tex_id,0);
 
 		// Draw square
 		glBindVertexArray(frameVAO);
@@ -517,7 +529,7 @@ GLuint LoadJpegTexture (const char* jpegfilename, int* width, int* height) {
 	return textureID;
 }
 
-GLuint CreateFrame (int width, int height, int border) {
+GLuint CreateFrame (int width, int height) {
 	static unsigned int square_index[] = {
 		0, 1, 2, 3
 	};
