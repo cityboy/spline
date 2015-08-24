@@ -5,6 +5,7 @@
 #include "Grid.hpp"
 #include <stdio.h>
 #include <math.h>
+#include <Eigen/Dense>
 
 Grid::Grid (unsigned int sz, float min, float max) {
 	mSize = sz;
@@ -29,11 +30,12 @@ Grid::~Grid () {
 }
 
 void Grid::Initialise () {
+/*-
 	//-- Initialise knot values
 	for (int i=0; i<NUM_KNOTS+3; i++)
 		for (int j=0; j<NUM_KNOTS+3; j++)
 			mKnots[i][j] = glm::vec2(0.0f,0.0f);
-
+-*/
 	//-- Initialise vertex positions
 	float step = (mMax - mMin) / float(mSize);
 	
@@ -90,6 +92,7 @@ void Grid::Display (int color) {
 	glDrawElements(GL_LINES, mIndicesSize, GL_UNSIGNED_INT, (void*)0);
 }
 
+/*-
 // Basis functions
 float B0 (float s) {
 	return ((1.0f-s)*(1.0f-s)*(1.0f-s)/6.0f);
@@ -116,93 +119,61 @@ void Grid::Embedding (glm::vec2 pt, int& i, int& j, float& s, float& t) {
 	s = ss - float(i-1);
 	t = tt - float(j-1);
 }
+-*/
+
+float RBF (float const rsq) {
+	return 1.0f / sqrt(1.0f + rsq*10.0f);
+}
+
+float Dsq (glm::vec2 const p1, glm::vec2 const p2) {
+	glm::vec2 d = p1 - p2;
+	return d.x*d.x + d.y*d.y;
+}
 
 void Grid::Warp (std::vector<ControlPoint> cps) {
-	int i, j;
-	float s, t;
-	float bs[4], bt[4];
 
-	//-- Intermediate arrays
-	glm::vec2 d[NUM_KNOTS+3][NUM_KNOTS+3];
-	float w[NUM_KNOTS+3][NUM_KNOTS+3];
-	for (int b=0; b<NUM_KNOTS+3; b++) {
-		for (int a=0; a<NUM_KNOTS+3; a++) {
-			d[a][b] = glm::vec2(0.0f,0.0f);
-			w[a][b] = 0.0f;
-		}
-	}
-
-	//-- Calculate knots for each control point and update intermediate arrays
-	for (std::vector<ControlPoint>::iterator it=cps.begin(); it!=cps.end(); ++it) {
-		printf("(%6.3f,%6.3f) (%6.3f,%6.3f)\n",it->Begin().x,it->Begin().y,it->End().x,it->End().y);
-		glm::vec2 ctrlPt = it->Begin();
-		glm::vec2 delta = it->End() - it->Begin();
+	// Contruct matrix to solve weights for RBF
+	int size = cps.size();
+	Eigen::MatrixXf Ax(size,size), Ay(size,size);
+	Eigen::VectorXf bx(size), by(size);
+	glm::vec2 Begin1, End1, Begin2; 
 	
-		// Calculate the embeddings
-		Embedding(ctrlPt, i, j, s, t);
-		printf("[%2d,%2d] (%6.3f,%6.3f)\n",i,j,s,t);
-		// Calculate basis values
-		bs[0] = B0(s); bs[1] = B1(s); bs[2] = B2(s); bs[3] = B3(s);
-		bt[0] = B0(t); bt[1] = B1(t); bt[2] = B2(t); bt[3] = B3(t);
-		float sum_w_sq = 0.0f;
-		for (int b=0; b<=3; b++)
-			for (int a=0; a<=3; a++)
-				sum_w_sq += bs[a]*bs[a]*bt[b]*bt[b];
-		// Calculate the shift of 16 neighborhood
-		for (int l=0; l<=3; l++) {
-			for (int k=0; k<=3; k++) {
-				mKnots[i+k-1][j+l-1] = delta * bs[k]*bt[l]/sum_w_sq;
-				float w_kl = bs[k]*bs[k]*bt[l]*bt[l];
-				d[i+k-1][j+l-1] = d[i+k-1][j+l-1] + mKnots[i+k-1][j+l-1] * w_kl;
-				w[i+k-1][j+l-1] += w_kl;				
-			}
-		}
-		/*--- DEBUG PRINT ---*
-		for (int b=0; b<NUM_KNOTS+3; b++) {
-			printf("b=%2d: ",b);
-			for (int a=0; a<NUM_KNOTS+3; a++)
-				printf("(%6.3f,%6.3f) ",mKnots[a][b].x,mKnots[a][b].y);
-			printf("\n");
-		}
-		*--- DEBUG PRINT ---*/
-	}
-	//-- Calculate the combined knots
-	for (int b=0; b<NUM_KNOTS+3; b++) {
-		for (int a=0; a<NUM_KNOTS+3; a++) {
-			if (w[a][b]!=0)
-				mKnots[a][b] = d[a][b] / w[a][b];
-			else
-				mKnots[a][b] = glm::vec2(0.0f,0.0f);
+	for (int i=0; i<size; i++) {
+		Begin1 = cps[i].Begin();
+		End1 = cps[i].End();
+		bx(i) = End1.x - Begin1.x;
+		by(i) = End1.y - Begin1.y;
+		for (int j=0; j<size; j++) {
+			Begin2 = cps[j].Begin();
+			Ax(i,j) = Ay(i,j) = RBF(Dsq(Begin1,Begin2));
 		}
 	}
-	/*--- DEBUG PRINT ---*/
-	for (int b=0; b<NUM_KNOTS+3; b++) {
-		printf("b=%2d: ",b);
-		for (int a=0; a<NUM_KNOTS+3; a++)
-			printf("(%6.3f,%6.3f) ",mKnots[a][b].x,mKnots[a][b].y);
-		printf("\n");
-	}
-	/*--- DEBUG PRINT ---*/
-	// Re-evalute vertices positions 
+
+	Eigen::VectorXf Wx = Eigen::FullPivLU<Eigen::MatrixXf>(Ax).solve(bx);
+	Eigen::VectorXf Wy = Eigen::FullPivLU<Eigen::MatrixXf>(Ay).solve(by);
+
 	float step = (mMax - mMin) / float(mSize);
+	
+	// Define vertex positions on the sides of the frame
 	glm::vec2 *ptr = mVertices;
-	for (int b=0; b<=mSize; b++) {
-		for (int a=0; a<=mSize; a++) {
-			ptr->x = mMin + step * float(b);
-			ptr->y = mMin + step * float(a);
-			Embedding(*ptr, i, j, s, t);
-			bs[0] = B0(s); bs[1] = B1(s); bs[2] = B2(s); bs[3] = B3(s);
-			bt[0] = B0(t); bt[1] = B1(t); bt[2] = B2(t); bt[3] = B3(t);
-			for (int l=0; l<=3; l++) {
-				for (int k=0; k<=3; k++) {
-					*ptr = *ptr + mKnots[i+k-1][j+l-1] * bs[k]*bt[l];
-				}
+	glm::vec2 point;
+	float rbf;
+	for (int i=0; i<=mSize; i++) {
+		for (int j=0; j<=mSize; j++) {
+			point.x = mMin + step * float(j);
+			point.y = mMin + step * float(i);
+			for (int k=0; k<size; k++) {
+				rbf = RBF(Dsq(point,cps[k].Begin()));
+				point.x = point.x + rbf * Wx[k];
+				point.y = point.y + rbf * Wy[k];
 			}
+			ptr->x = point.x;
+			ptr->y = point.y;
 			ptr++;
 		}
-	}	
-
+	}
 	glBindBuffer(GL_ARRAY_BUFFER, mVbo[0]);
 	glBufferData(GL_ARRAY_BUFFER, mVerticesSize * sizeof(glm::vec2), mVertices, GL_STATIC_DRAW);
 }
+
 

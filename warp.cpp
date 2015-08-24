@@ -24,19 +24,6 @@ using namespace glm;
 char sWindowTitle[] = "WARP";
 float win_width = 800.0f;
 float win_height = 800.0f;
-const char* vertex_shader =
-"#version 400\n"
-"in vec3 vp;"
-"void main () {"
-"  gl_Position = vec4 (vp, 1.0);"
-"}";
-const char* fragment_shader =
-"#version 400\n"
-"uniform vec3 color;"
-"out vec4 frag_colour;"
-"void main () {"
-"  frag_colour = vec4 (color.r, color.g, color.b, 1.0);"
-"}";
 
 Grid* grid;
 #define GRID_SZ 50
@@ -49,7 +36,7 @@ void window_size_callback(GLFWwindow*, int, int);
 void key_callback (GLFWwindow*, int, int, int, int);
 void cursor_pos_callback (GLFWwindow*, double, double);
 void button_callback (GLFWwindow*, int, int, int);
-GLuint LoadSimpleShader (const char* vert, const char* frag);
+GLuint LoadShader (const char *vertex_shader, const char *fragment_shader);
 GLuint CreateShape ();
 
 int main( void )
@@ -91,7 +78,8 @@ int main( void )
 	//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 
 	// Create and compile our GLSL program from the shaders
-	GLuint programme = LoadSimpleShader(vertex_shader,fragment_shader);
+//	GLuint programme = LoadSimpleShader(vertex_shader,fragment_shader);
+	GLuint programme = LoadShader("Simple.vert","Simple.frag");
     glUseProgram (programme);
 	GLuint ColorID = glGetUniformLocation(programme, "color");
 
@@ -187,13 +175,63 @@ void button_callback (GLFWwindow* window, int button, int action, int mods) {
 	} 
 }
 
-GLuint LoadSimpleShader (const char* vert, const char* frag) {
+//-- Read content of file 
+int ReadFile (const char *filename, char **buffer) {
+	FILE *fp;
+	int fsize;
+
+	fp = fopen(filename,"rb");
+	if (fp==NULL)
+		return 0;
+	//-- Find file size
+	fseek(fp, 0, SEEK_END); 
+	fsize = ftell(fp); 
+	fseek(fp, 0, SEEK_SET);
+	//-- Allocate memory to keep to content
+	if (*buffer!=NULL)
+		free(*buffer);
+	*buffer = (char*)malloc(fsize+1);
+	//-- Read file content
+	fread(*buffer, 1, fsize, fp);
+	(*buffer)[fsize] = 0;
+	//-- Close file and return file size
+	fclose(fp);
+	return fsize;
+}
+
+GLuint LoadShader (const char *vertex_shader, const char *fragment_shader) {
+	char *shader_code;
+	GLint blen=0;
+	GLsizei slen=0;
+	
+	ReadFile(vertex_shader,&shader_code);
     GLuint vs = glCreateShader (GL_VERTEX_SHADER);
-    glShaderSource (vs, 1, &vert, NULL);
+    glShaderSource (vs, 1, &shader_code, NULL);
     glCompileShader (vs);
+	glGetShaderiv(vs, GL_INFO_LOG_LENGTH , &blen);       
+	if (blen > 1) {
+		GLchar* compiler_log = (GLchar*)malloc(blen);
+		glGetShaderInfoLog(vs, blen, &slen, compiler_log);
+		printf("VTX compiler_log:%s\n", compiler_log);
+		free (compiler_log);
+		return(0);
+	}
+	//free (shader_code); //-- unable to free memory allocated in other part of the code
+
+	ReadFile(fragment_shader,&shader_code);
     GLuint fs = glCreateShader (GL_FRAGMENT_SHADER);
-    glShaderSource (fs, 1, &frag, NULL);
+    glShaderSource (fs, 1, &shader_code, NULL);
     glCompileShader (fs);
+	glGetShaderiv(fs, GL_INFO_LOG_LENGTH , &blen);       
+	if (blen > 1) {
+		GLchar* compiler_log = (GLchar*)malloc(blen);
+		glGetShaderInfoLog(fs, blen, &slen, compiler_log);
+		printf("FRAG compiler_log:%s\n", compiler_log);
+		free (compiler_log);
+		return(0);
+	}
+	//free (shader_code); //-- unable to free memory allocated in other part of the code
+
     GLuint shader_programme = glCreateProgram ();
     glAttachShader (shader_programme, fs);
     glAttachShader (shader_programme, vs);
