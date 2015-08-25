@@ -13,6 +13,9 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#include <jpeglib.h>
+#include <jerror.h>
+
 GLFWwindow* window;
 
 #include <glm/glm.hpp>
@@ -37,9 +40,10 @@ void key_callback (GLFWwindow*, int, int, int, int);
 void cursor_pos_callback (GLFWwindow*, double, double);
 void button_callback (GLFWwindow*, int, int, int);
 GLuint LoadShader (const char *vertex_shader, const char *fragment_shader);
-GLuint CreateShape ();
+unsigned char *LoadJpeg (const char *jpegfilename, int *width, int *height);
+GLuint CreateTexture (const unsigned char *data, int width, int height);
 
-int main( void )
+int main (int argc, char **argv)
 {
 	// Initialise GLFW
 	if( !glfwInit() )
@@ -78,12 +82,18 @@ int main( void )
 	//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 
 	// Create and compile our GLSL program from the shaders
-//	GLuint programme = LoadSimpleShader(vertex_shader,fragment_shader);
 	GLuint programme = LoadShader("Simple.vert","Simple.frag");
     glUseProgram (programme);
+	GLuint UseTextureID = glGetUniformLocation(programme, "useTexture");
 	GLuint ColorID = glGetUniformLocation(programme, "color");
+	GLuint TextureID = glGetUniformLocation(programme, "Texture");
 
 	grid = new Grid(GRID_SZ, GRID_MIN, GRID_MAX);
+	grid->SetShaderInterface(UseTextureID, ColorID, TextureID);
+
+	int w, h; 
+	unsigned char *buff = LoadJpeg(argv[1], &w, &h);
+	grid->SetImage(buff, w, h);
 
 	// Enable depth test
 	glEnable(GL_DEPTH_TEST);
@@ -100,7 +110,7 @@ int main( void )
 			it->Display(ColorID);
 		}
 
-		grid->Display(ColorID);
+		grid->Display();
 		
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -239,4 +249,83 @@ GLuint LoadShader (const char *vertex_shader, const char *fragment_shader) {
 	return shader_programme;
 }
 
+unsigned char *LoadJpeg (const char *jpegfilename, int *width, int *height) {
+
+	printf("Reading image %s\n", jpegfilename);
+
+	// Open the file
+	FILE * file = fopen(jpegfilename,"rb");
+	if (!file) {
+		printf("%s could not be opened. Are you in the right directory ? Don't forget to read the FAQ !\n", jpegfilename); 
+		getchar(); 
+		return NULL;
+	}
+
+	//Init the structs required by libjpeg
+	struct jpeg_decompress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+
+	//Redirect stderr so things aren't messy
+	cinfo.err = jpeg_std_error(&jerr);
+
+	//Init the decompress struct
+	jpeg_create_decompress(&cinfo);
+
+	//Point libjpeg at the file
+	jpeg_stdio_src(&cinfo, file);
+	//Read in the JPEG header
+	jpeg_read_header(&cinfo, TRUE);
+	
+	*width = cinfo.image_width;
+	*height = cinfo.image_height;
+	
+	// Create a buffer
+	unsigned char* data = (unsigned char*) malloc(sizeof(char) * 3 * cinfo.image_width * cinfo.image_height);
+
+	//Begin magic.
+	jpeg_start_decompress(&cinfo);
+
+	while (cinfo.output_scanline < cinfo.output_height) {
+		unsigned char* line = data + (cinfo.num_components * cinfo.image_width) * (cinfo.image_height-cinfo.output_scanline-1);
+		jpeg_read_scanlines(&cinfo, &line, 1);
+	}
+	jpeg_finish_decompress(&cinfo);
+	jpeg_destroy_decompress(&cinfo);
+
+	// Everything is in memory now, the file wan be closed
+	fclose (file);
+	
+	// If image is black & white, replicate the pixel value 3 times
+	if (cinfo.num_components==1) 
+		for (int i=cinfo.image_width*cinfo.image_height-1; i>=0; i--)
+			data[i*3] = data[i*3+1] = data[i*3+2] = data[i];
+	
+	// Return the pointer to the image data buffer
+	return data;
+}
+
+GLuint CreateTexture (const unsigned char *data, int width, int height) {
+	// Create one OpenGL texture
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	
+	// "Bind" the newly created texture : all future texture functions will modify this texture
+	glBindTexture(GL_TEXTURE_2D, textureID);
+
+	// Give the image to OpenGL
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+
+	// Poor filtering, or ...
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
+
+	// ... nice trilinear filtering.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
+
+	// Return the ID of the texture we just created
+	return textureID;
+}
 

@@ -13,12 +13,16 @@
 
 #define NUM_KNOTS 5
 
+extern GLuint CreateTexture (const unsigned char *data, int width, int height);
+
 class Grid {
 public:
 	Grid (unsigned int sz, float min=-1.0f, float max=1.0f);
 	~Grid ();
+	void SetShaderInterface (GLuint useTexture, GLuint Color, GLuint Texture);
+	void SetImage (const unsigned char *buff, int width, int height);
 	void Initialise ();
-	void Display (int color=-1);
+	void Display ();
 	void Warp (std::vector<ControlPoint> cps);
 	
 private:
@@ -28,8 +32,14 @@ private:
 	unsigned int* mIndices;
 	unsigned int mVerticesSize, mIndicesSize;
 	glm::vec2 mKnots[NUM_KNOTS+3][NUM_KNOTS+3];
-	GLuint mVao;
-	GLuint mVbo[2];
+	GLuint mVaoGrid;		// Display grid
+	GLuint mVboGrid[2];
+	GLuint mVaoFrame;		// Display image
+	GLuint mVboFrame[3];
+	GLuint mUseTextureID, mColorID, mTextureID;
+	const unsigned char *mImageBuffer;
+	int mWidth, mHeight;
+	GLuint mTexImage; 
 	void Embedding (glm::vec2 pt, int& i, int& j, float& s, float& t); 
 };
 
