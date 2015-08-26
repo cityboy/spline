@@ -62,8 +62,8 @@ glm::vec2 ControlPoint::End () const {
 
 // color has default value of -1, which means DOES NOT change color
 void ControlPoint::Display (int color) {
-	if (color>=0)
-		glUniform3f(color, 1.0f, 1.0f, 0.0f);
+//	if (color>=0)
+		glUniform3f(color, 1.0f, 1.0f, 1.0f);
 	glBindVertexArray(mVao);
 	glDrawArrays(GL_TRIANGLE_FAN,0,4);
 	if (mEnded) {

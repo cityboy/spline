@@ -29,13 +29,12 @@ private:
 	int mSize;
 	float mMax, mMin;
 	glm::vec2* mVertices;
+	glm::vec2* mUV;
 	unsigned int* mIndices;
-	unsigned int mVerticesSize, mIndicesSize;
+	unsigned int mVerticesSize, mIndicesSize[2];
 	glm::vec2 mKnots[NUM_KNOTS+3][NUM_KNOTS+3];
-	GLuint mVaoGrid;		// Display grid
-	GLuint mVboGrid[2];
-	GLuint mVaoFrame;		// Display image
-	GLuint mVboFrame[3];
+	GLuint mVaoGrid;
+	GLuint mVboGrid[3];
 	GLuint mUseTextureID, mColorID, mTextureID;
 	const unsigned char *mImageBuffer;
 	int mWidth, mHeight;
