@@ -16,7 +16,7 @@ public:
 	bool Ended () const;
 	glm::vec2 Begin () const;
 	glm::vec2 End () const;
-	void Display (int color);
+	void Display (int color=-1);
 	
 private:
 	//glm::vec2 mBeginPos, mEndPos;

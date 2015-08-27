@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include <iostream>
 #include <Eigen/Dense>
 
 Grid::Grid (unsigned int sz, float min, float max) {
@@ -141,21 +140,6 @@ float Dsq (glm::vec2 const p1, glm::vec2 const p2) {
 	return d.x*d.x + d.y*d.y;
 }
 
-float A (glm::vec2 const p1, glm::vec2 const p2) {
-//	return (sqrt( (p1.x*p1.x+p1.y*p1.y)*(p2.x*p2.x+p2.y*p2.y) - 2*(p1.x*p2.x+p1.y*p2.y) + 1) / glm::length(p1-p2));
-	float l1 = glm::length(p1);
-	float l2 = glm::length(p2);
-	float l12 = glm::length(p1-p2);
-	float d12 = glm::dot(p1,p2);
-	return ( sqrt(l1*l1*l2*l2 - 2*d12 + 1) / l12 );
-}
-
-float G (glm::vec2 const p1, glm::vec2 const p2) {
-	float a = A(p1, p2);
-	float l = glm::length(p1-p2);
-	return ( l*l * ((a*a-1)/2 - log(a)) );
-}
-
 void Grid::Warp (std::vector<ControlPoint> cps) {
 
 	// Contruct matrix to solve weights for RBF
@@ -166,51 +150,36 @@ void Grid::Warp (std::vector<ControlPoint> cps) {
 	
 	for (int i=0; i<size; i++) {
 		Begin1 = cps[i].Begin();
-		//End1 = cps[i].End();
-		End1 = glm::normalize(cps[i].End()-cps[i].Begin()) * (glm::length(cps[i].End()-cps[i].Begin()) * 5) + cps[i].Begin();
+		End1 = cps[i].End();
 		bx(i) = End1.x - Begin1.x;
 		by(i) = End1.y - Begin1.y;
 		for (int j=0; j<size; j++) {
-			if (j==i) {
-				Ax(i,j) = Ay(i,j) = 1.0f;
-			} else {
-				Begin2 = cps[j].Begin();
-				//Ax(i,j) = Ay(i,j) = RBF(Dsq(Begin1,Begin2));
-				Ax(i,j) = Ay(i,j) = G(Begin1,Begin2);
-			}
+			Begin2 = cps[j].Begin();
+			Ax(i,j) = Ay(i,j) = RBF(Dsq(Begin1,Begin2));
 		}
 	}
-	std::cout << "Ax = " <<std::endl << Ax << std::endl;
-	std::cout << "Ay = " <<std::endl << Ay << std::endl;
 
 	Eigen::VectorXf Wx = Eigen::FullPivLU<Eigen::MatrixXf>(Ax).solve(bx);
 	Eigen::VectorXf Wy = Eigen::FullPivLU<Eigen::MatrixXf>(Ay).solve(by);
-	
-	std::cout << "Wx " <<std::endl << Wx << std::endl;
-	std::cout << "Wy " <<std::endl << Wy << std::endl;
 
 	float step = (mMax - mMin) / float(mSize);
 	
 	// Update the Grid vertex positions
 	glm::vec2 *ptr = mVertices;
 	glm::vec2 point;
-	float g;
+	float rbf;
 	for (int i=0; i<=mSize; i++) {
 		for (int j=0; j<=mSize; j++) {
 			ptr->x = point.x = mMin + step * float(j);
 			ptr->y = point.y = mMin + step * float(i);
-			if (glm::length(point)<1.0f) {
-				for (int k=0; k<size; k++) {
-					//rbf = RBF(Dsq(point,cps[k].Begin()));
-					g = G(point,cps[k].Begin());
-					ptr->x += Wx[k] * g;
-					ptr->y += Wy[k] * g;
-				}
+			for (int k=0; k<size; k++) {
+				rbf = RBF(Dsq(point,cps[k].Begin()));
+				ptr->x += Wx[k] * rbf;
+				ptr->y += Wy[k] * rbf;
 			}
 			ptr++;
 		}
 	}
-	
 	glBindBuffer(GL_ARRAY_BUFFER, mVboGrid[0]);
 	glBufferData(GL_ARRAY_BUFFER, mVerticesSize * sizeof(glm::vec2), mVertices, GL_STATIC_DRAW);
 }
