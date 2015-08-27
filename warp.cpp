@@ -30,8 +30,8 @@ float win_height = 800.0f;
 
 Grid* grid;
 #define GRID_SZ 50
-#define GRID_MIN -0.95f
-#define GRID_MAX 0.95f
+#define GRID_MIN -1.0f
+#define GRID_MAX 1.0f
 
 std::vector<ControlPoint> controlPoints;
 
