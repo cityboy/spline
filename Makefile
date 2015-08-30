@@ -16,21 +16,9 @@ LFLAGS = -framework OpenGL -framework Cocoa -framework CoreVideo -framework IOKi
 #-- have to link the same libraries multiple times because for the interdependency
 LIBS = -lglfw3 -lGLEWs -ljpeg
 
-all: warp transform register bspline multiwindows
+all: register
 
-multiwindows: multiwindows.o
-	$(CC) -o $@ $^ $(LFLAGS) $(LPATH) $(LIBS)
-	
-bspline: bspline.o
-	$(CC) -o $@ $^ $(LFLAGS) $(LPATH) $(LIBS)
-	
 register: register.o
-	$(CC) -o $@ $^ $(LFLAGS) $(LPATH) $(LIBS)
-	
-warp: warp.o Grid.o ControlPoint.o
-	$(CC) -o $@ $^ $(LFLAGS) $(LPATH) $(LIBS)
-	
-transform: transform.o Grid.o ControlPoint.o
 	$(CC) -o $@ $^ $(LFLAGS) $(LPATH) $(LIBS)
 	
 .cpp.o: 
