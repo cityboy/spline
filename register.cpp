@@ -159,9 +159,14 @@ int main (int argc, char** argv)
 	glBindTexture(GL_TEXTURE_2D, tgtTexture);
 	glUniform1i(tgtSampler,1);
 
-	float affine[6] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f};		// inital value - no transform
+	//float affine[6] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f};		// inital value - no transform
 	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.2f, 0.0f};
-	float f[7], m[7];
+	float transform[25];
+	float num_sections = 10;
+	transform[0] = transform[1] = float(num_sections);
+	for (int i=2; i<25; i++)
+		transform[i] = 0.0f;
+	float m[21];
 	int iter = 0;
 	// Switch to another texture - avoid affecting Texture 0 & 1
 	glBindVertexArray(frameVAO);
@@ -173,12 +178,16 @@ int main (int argc, char** argv)
 		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
 		glUniform1i(sqdiff,1);
 
-		for (int p=0; p<=6; p++) {
+		for (int p=0; p<=num_sections*2; p++) {
 			// Differentiate numerically
-			if (p!=6)
-				affine[p] += DELTA;
+			//if ((p>=0)&&(p<=4))
+			//	transform[5+p] += DELTA;
+			//else if ((p>=5)&&(p<=9))
+			//	transform[10+p] += DELTA;
+			if (p!=num_sections*2)
+				transform[5+p] += DELTA;
 			// Set transform parameters
-			glUniform1fv(params,6,affine);
+			glUniform1fv(params,25,transform);
 			// Draw square
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
@@ -204,14 +213,23 @@ int main (int argc, char** argv)
 			f[p] = texdata;
 ----*/
 			// Restore to original value
-			if (p!=6)
-				affine[p] -= DELTA;
+			//if ((p>=0)&&(p<=4))
+			//	transform[5+p] -= DELTA;
+			//else if ((p>=5)&&(p<=9))
+			//	transform[10+p] -= DELTA;
+			if (p!=num_sections*2)
+				transform[5+p] -= DELTA;
 		}
 		// adjust parameters using gradient descent
-		for (int p=0; p<6; p++) {
-			affine[p] -= ALPHA * (m[p] - m[6]);
-		}
-		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[6],affine[0],affine[1],affine[2],affine[3],affine[4],affine[5]);
+		//for (int p=0; p<=4; p++) {
+		//	transform[5+p] -= ALPHA * (m[p] - m[10]);
+		//}
+		//for (int p=5; p<=9; p++) {
+		//	transform[10+p] -= ALPHA * (m[p] - m[10]);
+		//}
+		for (int p=0; p<num_sections*2; p++)
+			transform[5+p] -= ALPHA * (m[p] - m[20]);
+		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[2],transform[3],transform[4],transform[5],transform[6],transform[15],transform[16]);
 		iter++;
 
 		// Render to the screen
@@ -223,7 +241,7 @@ int main (int argc, char** argv)
 		// Swap buffers
 		glfwSwapBuffers(g_MainWindow);
 
-	} while (iter<500);
+	} while (iter<100);
 	// Re-generate image without SSD
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
