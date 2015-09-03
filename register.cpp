@@ -20,7 +20,8 @@ float g_WindowWidth = 800.0f;
 float g_WindowHeight = 800.0f;
 #define BORDER 0
 #define DELTA 0.01f
-#define ALPHA 1.0f
+#define ALPHA 1.5f
+#define ITERATIONS 200
 
 void CallbackWindowSize (GLFWwindow*, int, int);
 void CallbackKey (GLFWwindow*, int, int, int, int);
@@ -162,11 +163,10 @@ int main (int argc, char** argv)
 	//float affine[6] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f};		// inital value - no transform
 	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.2f, 0.0f};
 	float transform[25];
-	float num_sections = 10;
-	transform[0] = transform[1] = float(num_sections);
+	transform[0] = transform[1] = 10;
 	for (int i=2; i<25; i++)
 		transform[i] = 0.0f;
-	float m[21];
+	float m[26];
 	int iter = 0;
 	// Switch to another texture - avoid affecting Texture 0 & 1
 	glBindVertexArray(frameVAO);
@@ -178,14 +178,14 @@ int main (int argc, char** argv)
 		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
 		glUniform1i(sqdiff,1);
 
-		for (int p=0; p<=num_sections*2; p++) {
+		for (int p=0; p<=25; p++) {
 			// Differentiate numerically
 			//if ((p>=0)&&(p<=4))
 			//	transform[5+p] += DELTA;
 			//else if ((p>=5)&&(p<=9))
 			//	transform[10+p] += DELTA;
-			if (p!=num_sections*2)
-				transform[5+p] += DELTA;
+			if (p!=25)
+				transform[p] += DELTA;
 			// Set transform parameters
 			glUniform1fv(params,25,transform);
 			// Draw square
@@ -217,8 +217,8 @@ int main (int argc, char** argv)
 			//	transform[5+p] -= DELTA;
 			//else if ((p>=5)&&(p<=9))
 			//	transform[10+p] -= DELTA;
-			if (p!=num_sections*2)
-				transform[5+p] -= DELTA;
+			if (p!=25)
+				transform[p] -= DELTA;
 		}
 		// adjust parameters using gradient descent
 		//for (int p=0; p<=4; p++) {
@@ -227,9 +227,9 @@ int main (int argc, char** argv)
 		//for (int p=5; p<=9; p++) {
 		//	transform[10+p] -= ALPHA * (m[p] - m[10]);
 		//}
-		for (int p=0; p<num_sections*2; p++)
-			transform[5+p] -= ALPHA * (m[p] - m[20]);
-		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[2],transform[3],transform[4],transform[5],transform[6],transform[15],transform[16]);
+		for (int p=0; p<25; p++)
+			transform[p] -= ALPHA * (m[p] - m[25]);
+		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[25],transform[2],transform[3],transform[4],transform[5],transform[15],transform[16]);
 		iter++;
 
 		// Render to the screen
@@ -241,37 +241,40 @@ int main (int argc, char** argv)
 		// Swap buffers
 		glfwSwapBuffers(g_MainWindow);
 
-	} while (iter<100);
+	} while (iter<ITERATIONS);
 	// Re-generate image without SSD
+	//-- Render directly to screen
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0,0,fbw,fbh);
+	glUniform1i(sqdiff,0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
+
+	//-- Render to Texture and then display at screen
+/*----
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
 	glUniform1i(sqdiff,0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
-
 	// Render to the screen
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glfwGetFramebufferSize(g_MainWindow,&fbw,&fbh); // Get window size in Pixels
 	glViewport(0,0,fbw,fbh);
-
+	glUseProgram(pass_shader);
+	// Enable Texture
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, diffTexture);
+	glUniform1i(texSampler,0);
+	// Draw square
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glBindVertexArray(frameVAO);
+	glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
+----*/
+	// Swap buffers
+	glfwSwapBuffers(g_MainWindow);
 
 	while (!glfwWindowShouldClose(g_MainWindow)) {
-
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glUseProgram(pass_shader);
-		// Enable Texture
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, diffTexture);
-		glUniform1i(texSampler,0);
-
-		// Draw square
-		glBindVertexArray(frameVAO);
-		glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
-
-		// Swap buffers
-		glfwSwapBuffers(g_MainWindow);
 		glfwPollEvents();
-
 	} 
 
 	// Close OpenGL window and terminate GLFW

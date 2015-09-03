@@ -21,26 +21,28 @@ void main () {
 	// Contruct 3x3 transformation matrix
 	//--mat3 affine = mat3(params[0], params[1], 0.0f, params[2], params[3], 0.0f, params[4], params[5], 1.0f);
 	// Transform to new position
-	//--mat3 affine = mat3(
-	//--	cos(params[2])*params[3], sin(params[2])*params[4], 0.0f, 
-	//--	-sin(params[2])*params[3], cos(params[2])*params[4], 0.0f,
-	//--	params[0], params[1], 1.0f );
-	//--vec3 transformed = affine * vec3(UV, 1.0f);
-	vec2 transformed = UV;
+	mat3 affine = mat3(
+		cos(params[4]), sin(params[4]), 0.0f, 
+		-sin(params[4]), cos(params[4]), 0.0f,
+		params[2], params[3], 1.0f );
+	vec3 transformed = affine * vec3(UV, 1.0f);
+//	vec2 transformed = UV;					// by pass translation & rotation
+//	vec3 transformed = vec3(UV, 1.0f);		// do scaling first
 	for (int i=0; i< params[0]; i++)
 		transformed.x += params[5+i] * RBF(float(i+1)/params[0],UV.x);
 	for (int i=0; i< params[1]; i++)
 		transformed.y += params[15+i] * RBF(float(i+1)/params[1],UV.y);
+//	transformed = affine * transformed;		// do scaling first
 	float color;
 	// Blank the image if it transforms outside the texture
 	if ((transformed.x<0.0f)||(transformed.x>1.0f)||(transformed.y<0.0f)||(transformed.y>1.0f))
 		color = 0.0;
 	else {
 		if (sqdiff!=0) {
-			color = texture(SourceTextureSampler,transformed).r - texture(TargetTextureSampler,UV).r;
+			color = texture(SourceTextureSampler,transformed.xy).r - texture(TargetTextureSampler,UV).r;
 			color = color * color;
 		} else {
-			color = texture(SourceTextureSampler,transformed).r;
+			color = texture(SourceTextureSampler,transformed.xy).r;
 			//color = texture(TargetTextureSampler,UV).r;
 		}
 	}
