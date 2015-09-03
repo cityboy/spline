@@ -20,8 +20,8 @@ float g_WindowWidth = 800.0f;
 float g_WindowHeight = 800.0f;
 #define BORDER 0
 #define DELTA 0.01f
-#define ALPHA 1.5f
-#define ITERATIONS 200
+#define ALPHA 2.0f
+#define ITERATIONS 500
 
 void CallbackWindowSize (GLFWwindow*, int, int);
 void CallbackKey (GLFWwindow*, int, int, int, int);
@@ -59,10 +59,10 @@ int main (int argc, char** argv)
 	}
 
 	// Create and compile our GLSL program from the shaders for Affine transform and calculate SSD
-	GLuint transform_shader = LoadShader("Affine.vert", "Affine.frag");
+	GLuint transform_shader = LoadShader("BCPS.vert", "BCPS.frag");
 	GLuint srcSampler  = glGetUniformLocation(transform_shader, "SourceTextureSampler");
 	GLuint tgtSampler  = glGetUniformLocation(transform_shader, "TargetTextureSampler");
-	GLuint params  = glGetUniformLocation(transform_shader, "params");
+	GLuint w_id  = glGetUniformLocation(transform_shader, "weights");
 	GLuint sqdiff  = glGetUniformLocation(transform_shader, "sqdiff");
 
 	// Shader to passthough texture for displaying the final processed image
@@ -160,13 +160,10 @@ int main (int argc, char** argv)
 	glBindTexture(GL_TEXTURE_2D, tgtTexture);
 	glUniform1i(tgtSampler,1);
 
-	//float affine[6] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f};		// inital value - no transform
-	//float affine[6] = {0.866f, 0.5f, -0.5f, 0.866f, 0.2f, 0.0f};
-	float transform[25];
-	transform[0] = transform[1] = 10;
-	for (int i=2; i<25; i++)
-		transform[i] = 0.0f;
-	float m[26];
+	float weight[9*2];
+	for (int i=0; i<18; i++)
+		weight[i] = 0.0f;
+	float m[19];
 	int iter = 0;
 	// Switch to another texture - avoid affecting Texture 0 & 1
 	glBindVertexArray(frameVAO);
@@ -178,16 +175,16 @@ int main (int argc, char** argv)
 		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
 		glUniform1i(sqdiff,1);
 
-		for (int p=0; p<=25; p++) {
+		for (int p=0; p<=18; p++) {
 			// Differentiate numerically
 			//if ((p>=0)&&(p<=4))
 			//	transform[5+p] += DELTA;
 			//else if ((p>=5)&&(p<=9))
 			//	transform[10+p] += DELTA;
-			if (p!=25)
-				transform[p] += DELTA;
+			if (p!=18)
+				weight[p] += DELTA;
 			// Set transform parameters
-			glUniform1fv(params,25,transform);
+			glUniform2fv(w_id,9,weight);
 			// Draw square
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
@@ -217,8 +214,8 @@ int main (int argc, char** argv)
 			//	transform[5+p] -= DELTA;
 			//else if ((p>=5)&&(p<=9))
 			//	transform[10+p] -= DELTA;
-			if (p!=25)
-				transform[p] -= DELTA;
+			if (p!=18)
+				weight[p] -= DELTA;
 		}
 		// adjust parameters using gradient descent
 		//for (int p=0; p<=4; p++) {
@@ -227,9 +224,9 @@ int main (int argc, char** argv)
 		//for (int p=5; p<=9; p++) {
 		//	transform[10+p] -= ALPHA * (m[p] - m[10]);
 		//}
-		for (int p=0; p<25; p++)
-			transform[p] -= ALPHA * (m[p] - m[25]);
-		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[25],transform[2],transform[3],transform[4],transform[5],transform[15],transform[16]);
+		for (int p=0; p<18; p++)
+			weight[p] -= ALPHA * (m[p] - m[18]);
+		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[18],weight[0],weight[1],weight[2],weight[3],weight[4],weight[5]);
 		iter++;
 
 		// Render to the screen
