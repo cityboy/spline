@@ -160,10 +160,10 @@ int main (int argc, char** argv)
 	glBindTexture(GL_TEXTURE_2D, tgtTexture);
 	glUniform1i(tgtSampler,1);
 
-	float weight[9*2];
-	for (int i=0; i<18; i++)
+	float weight[16*2];
+	for (int i=0; i<32; i++)
 		weight[i] = 0.0f;
-	float m[19];
+	float m[33];
 	int iter = 0;
 	// Switch to another texture - avoid affecting Texture 0 & 1
 	glBindVertexArray(frameVAO);
@@ -175,16 +175,16 @@ int main (int argc, char** argv)
 		glViewport(0,0,srcWidth, srcHeight); // Rendered texture will equal to size of source 
 		glUniform1i(sqdiff,1);
 
-		for (int p=0; p<=18; p++) {
+		for (int p=0; p<=32; p++) {
 			// Differentiate numerically
 			//if ((p>=0)&&(p<=4))
 			//	transform[5+p] += DELTA;
 			//else if ((p>=5)&&(p<=9))
 			//	transform[10+p] += DELTA;
-			if (p!=18)
+			if (p!=32)
 				weight[p] += DELTA;
 			// Set transform parameters
-			glUniform2fv(w_id,9,weight);
+			glUniform2fv(w_id,32,weight);
 			// Draw square
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, (void*)0);
@@ -214,7 +214,7 @@ int main (int argc, char** argv)
 			//	transform[5+p] -= DELTA;
 			//else if ((p>=5)&&(p<=9))
 			//	transform[10+p] -= DELTA;
-			if (p!=18)
+			if (p!=32)
 				weight[p] -= DELTA;
 		}
 		// adjust parameters using gradient descent
@@ -224,9 +224,9 @@ int main (int argc, char** argv)
 		//for (int p=5; p<=9; p++) {
 		//	transform[10+p] -= ALPHA * (m[p] - m[10]);
 		//}
-		for (int p=0; p<18; p++)
-			weight[p] -= ALPHA * (m[p] - m[18]);
-		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[18],weight[0],weight[1],weight[2],weight[3],weight[4],weight[5]);
+		for (int p=0; p<32; p++)
+			weight[p] -= ALPHA * (m[p] - m[32]);
+		printf("%3d (%9.7f) %10.7f %10.7f %10.7f %10.7f %10.7f %10.7f\n",iter,m[32],weight[0],weight[1],weight[2],weight[3],weight[4],weight[5]);
 		iter++;
 
 		// Render to the screen

@@ -5,16 +5,18 @@ layout(location=0) out vec4 frag_colour;
 uniform sampler2D SourceTextureSampler;
 uniform sampler2D TargetTextureSampler;
 // The texture space is rescaled to (-1,+1) 
-// 9 control points are fixed at -0.5, 0.0, +0.5 horizontal and vertical
-vec2 knots[9] = vec2[](
-	vec2(-0.5f,-0.5f), vec2( 0.0f,-0.5f), vec2( 0.5f,-0.5f),
-	vec2(-0.5f, 0.0f), vec2( 0.0f, 0.0f), vec2( 0.5f, 0.0f),
-	vec2(-0.5f, 0.5f), vec2( 0.0f, 0.5f), vec2( 0.5f, 0.5f));
+// 16 control points are fixed at +/-0.2, +/-0.6 horizontal and vertical
+vec2 knots[16] = vec2[](
+	vec2(-0.6f,-0.6f), vec2(-0.2f,-0.6f), vec2( 0.2f,-0.6f), vec2( 0.6f,-0.6f),
+	vec2(-0.6f,-0.2f), vec2(-0.2f,-0.2f), vec2( 0.2f,-0.2f), vec2( 0.6f,-0.2f),
+	vec2(-0.6f, 0.2f), vec2(-0.2f, 0.2f), vec2( 0.2f, 0.2f), vec2( 0.6f, 0.2f),
+	vec2(-0.6f, 0.6f), vec2(-0.2f, 0.6f), vec2( 0.2f, 0.6f), vec2( 0.6f, 0.6f));
 // The weight of the control points are provided by the host.
-uniform vec2 weights[9] = vec2[](
-	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f),
-	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f),
-	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f));
+uniform vec2 weights[16] = vec2[](
+	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f),
+	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f),
+	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f),
+	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f));
 // Turn on/off calculation of squared difference.
 // It is used to produce the final transformed image. 
 uniform int sqdiff = 1;	
@@ -41,7 +43,7 @@ void main () {
 	if (length(transformed)<1.0f) {
 		vec2 point = transformed;
 		float g;
-		for (int i=0; i<9; i++) {
+		for (int i=0; i<16; i++) {
 			g = G(point, knots[i]);
 			transformed = transformed + weights[i] * g;
 		}
