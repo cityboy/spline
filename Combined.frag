@@ -6,13 +6,12 @@ uniform sampler2D SourceTextureSampler;
 uniform sampler2D TargetTextureSampler;
 // Parameters for rigid transformation
 uniform float params[5] = float[](0.0f, 0.0f, 0.0f, 1.0f, 1.0f);  // shift x,y, rotation, scale x,y
-// The texture space is rescaled to (-1,+1) 
-// 16 control points are fixed at +/-0.2, +/-0.6 horizontal and vertical
+// 16 control points are fixed at 0.2, 0.4, 0.6, 0.8 horizontal and vertical
 vec2 knots[16] = vec2[](
-	vec2(-0.6f,-0.6f), vec2(-0.2f,-0.6f), vec2( 0.2f,-0.6f), vec2( 0.6f,-0.6f),
-	vec2(-0.6f,-0.2f), vec2(-0.2f,-0.2f), vec2( 0.2f,-0.2f), vec2( 0.6f,-0.2f),
-	vec2(-0.6f, 0.2f), vec2(-0.2f, 0.2f), vec2( 0.2f, 0.2f), vec2( 0.6f, 0.2f),
-	vec2(-0.6f, 0.6f), vec2(-0.2f, 0.6f), vec2( 0.2f, 0.6f), vec2( 0.6f, 0.6f));
+	vec2(0.2f,0.2f), vec2(0.4f,0.2f), vec2(0.6f,0.2f), vec2(0.8f,0.2f),
+	vec2(0.2f,0.4f), vec2(0.4f,0.4f), vec2(0.6f,0.4f), vec2(0.8f,0.4f),
+	vec2(0.2f,0.6f), vec2(0.4f,0.6f), vec2(0.6f,0.6f), vec2(0.8f,0.6f),
+	vec2(0.2f,0.8f), vec2(0.4f,0.8f), vec2(0.6f,0.8f), vec2(0.8f,0.8f));
 // The weight of the control points are provided by the host.
 uniform vec2 weights[16] = vec2[](
 	vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f), vec2(0.0f,0.0f),
@@ -25,9 +24,9 @@ uniform int affine = 0;
 uniform int bcps = 0;	
 uniform int sqdiff = 1;	
 
-float RBF (float p0, float p1) {
-	float d = p0 - p1;
-	return exp(-2.0f*d*d);
+float RBF (vec2 p0, vec2 p1) {
+	vec2 d = p0 - p1;
+	return exp(-2.0f*(d.x*d.x+d.y*d.y));
 }
 
 float A (vec2 p1, vec2 p2) {
@@ -56,19 +55,12 @@ void main () {
 		transformed = temp.xy;
 	}
 	if (bcps!=0) {
-		// Scale the texture coordinates to (-1,1)
-		transformed = transformed*2.0f - vec2(1.0f,1.0f);
-		// Deform if inside the unit circle
-		if (length(transformed)<1.0f) {
-			vec2 point = transformed;
-			float g;
-			for (int i=0; i<16; i++) {
-				g = G(point, knots[i]);
-				transformed = transformed + weights[i] * g;
-			}
+		vec2 point = transformed;
+		float rbf;
+		for (int i=0; i<16; i++) {
+			rbf = RBF(point, knots[i]);
+			transformed = transformed + weights[i] * rbf;
 		}
-		// Scale the texture coordinates back to (0,1)
-		transformed = (transformed + vec2(1.0f,1.0f)) * 0.5f;
 	}
 
 	float color;
