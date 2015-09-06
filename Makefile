@@ -14,7 +14,7 @@ LPATH = -L$(GLFWDIR)/lib -L$(GLEWDIR)/lib -L$(JPGDIR)
 LFLAGS = -framework OpenGL -framework Cocoa -framework CoreVideo -framework IOKit
 #LDPATH = -Wl,-R/usr/pkg/lib
 #-- have to link the same libraries multiple times because for the interdependency
-LIBS = -lglfw3 -lGLEWs -ljpeg
+LIBS = -lglfw3 -lGLEWs -ljpeg $(HOME)/Projects/common/shader.o $(HOME)/Projects/common/Image.o
 
 all: register
 
